@@ -33,6 +33,8 @@ namespace FediCasa.Forms
         private Button btnConfirmar = null!;
         private Button btnBoleta = null!;
         private Button btnAnular = null!;
+        private Button btnProforma = null!;
+        private Button btnVerProformas = null!;
         private Button btnCerrar = null!;
 
         private DataGridView dgvCarrito = null!;
@@ -570,6 +572,32 @@ namespace FediCasa.Forms
                         new Size(140, 38)
                 };
 
+            btnProforma =
+                new Button
+                {
+                    Text =
+                        "Proforma",
+
+                    Location =
+                        new Point(540, 635),
+
+                    Size =
+                        new Size(140, 38)
+                };
+
+            btnVerProformas =
+                new Button
+                {
+                    Text =
+                        "Ver proformas",
+
+                    Location =
+                        new Point(690, 635),
+
+                    Size =
+                        new Size(140, 38)
+                };
+
             btnCerrar =
                 new Button
                 {
@@ -595,6 +623,12 @@ namespace FediCasa.Forms
             btnAnular.Click +=
                 BtnAnular_Click;
 
+            btnProforma.Click +=
+                BtnProforma_Click;
+
+            btnVerProformas.Click +=
+                BtnVerProformas_Click;
+
             btnCerrar.Click +=
                 BtnCerrar_Click;
 
@@ -611,6 +645,8 @@ namespace FediCasa.Forms
                     btnConfirmar,
                     btnBoleta,
                     btnAnular,
+                    btnProforma,
+                    btnVerProformas,
                     btnCerrar
                 });
         }
@@ -645,6 +681,12 @@ namespace FediCasa.Forms
 
             btnAnular.Enabled =
                 SesionService.PuedeAnularVenta();
+
+            btnProforma.Enabled =
+                SesionService.PuedeGestionarProformas();
+
+            btnVerProformas.Enabled =
+                SesionService.PuedeGestionarProformas();
 
             txtCodigoProducto.ReadOnly =
                 !puedeVender;
@@ -1322,6 +1364,7 @@ namespace FediCasa.Forms
             btnRegistrar.Enabled = false;
             btnConfirmar.Enabled = true;
             btnBoleta.Enabled = false;
+            btnProforma.Enabled = false; // el carrito ya se registró como venta
 
             txtCodigoProducto.Enabled = false;
             txtCantidad.Enabled = false;
@@ -1471,6 +1514,128 @@ namespace FediCasa.Forms
                 ruta);
 
             PrepararNuevaVenta();
+        }
+
+        // =========================================================
+        // PROFORMA / COTIZACIÓN
+        // No registra una venta ni descuenta stock: solo genera el
+        // documento con los productos del carrito. El carrito se
+        // mantiene para poder registrar la venta si el cliente acepta.
+        // =========================================================
+
+        private void BtnProforma_Click(
+            object sender,
+            EventArgs e)
+        {
+            if (!SesionService.PuedeGestionarProformas())
+            {
+                MostrarSinPermiso();
+                return;
+            }
+
+            if (idVentaActual > 0)
+            {
+                MessageBox.Show(
+                    "Ya hay una venta registrada en pantalla.\n\n" +
+                    "Termine o anule esa venta antes de crear una proforma.",
+                    "Proforma",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            List<ItemCarrito> carrito =
+                VentaService.ObtenerCarrito();
+
+            if (carrito.Count == 0)
+            {
+                MessageBox.Show(
+                    "Agregue al menos un producto para crear la proforma.",
+                    "Proforma",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            if (!ValidarDatosVenta())
+                return;
+
+            try
+            {
+                string ruta =
+                    ProformaHelper.GuardarProforma(
+                        carrito,
+                        txtDocumentoCliente.Text.Trim(),
+                        txtNombreCliente.Text.Trim(),
+                        out string contenido);
+
+                MostrarProforma(
+                    contenido,
+                    ruta);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "No se pudo generar la proforma.\n\n" +
+                    ex.Message,
+                    "Proforma",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        // Abre una proforma guardada anteriormente.
+        private void BtnVerProformas_Click(
+            object sender,
+            EventArgs e)
+        {
+            if (!SesionService.PuedeGestionarProformas())
+            {
+                MostrarSinPermiso();
+                return;
+            }
+
+            try
+            {
+                using (OpenFileDialog dialogo =
+                    new OpenFileDialog
+                    {
+                        Title = "Abrir proforma guardada",
+                        InitialDirectory =
+                            ProformaHelper.ObtenerCarpetaProformas(),
+                        Filter = "Proformas (*.txt)|*.txt"
+                    })
+                {
+                    if (dialogo.ShowDialog(this) != DialogResult.OK)
+                        return;
+
+                    MostrarProforma(
+                        ProformaHelper.LeerProforma(dialogo.FileName),
+                        dialogo.FileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "No se pudo abrir la proforma.\n\n" +
+                    ex.Message,
+                    "Proforma",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        private void MostrarProforma(
+            string contenido,
+            string ruta)
+        {
+            using (FrmProforma ventana =
+                new FrmProforma(contenido, ruta))
+            {
+                ventana.ShowDialog(this);
+            }
         }
 
         // =========================================================
@@ -1790,6 +1955,9 @@ namespace FediCasa.Forms
             btnConfirmar.Enabled = false;
 
             btnBoleta.Enabled = false;
+
+            btnProforma.Enabled =
+                SesionService.PuedeGestionarProformas();
 
             txtCodigoProducto.Enabled = true;
             txtCantidad.Enabled = true;
