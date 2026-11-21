@@ -264,91 +264,136 @@ namespace FediCasa.Forms
                 $"Usuario: {usuario}";
 
             // -----------------------------------------------------
-            // PRODUCTOS
-            // CU-03 Gestionar productos
-            // -----------------------------------------------------
-
-            btnProductos.Visible =
-                SesionService.PuedeGestionarProductos();
-
-            // -----------------------------------------------------
-            // INVENTARIO
+            // PERMISOS DE CADA BOTÓN (mismas reglas de siempre)
             //
-            // Este botón representa el módulo de inventario.
-            // Inventario puede trabajar con sus operaciones.
-            // Ventas puede consultar inventario.
-            // Administrador puede acceder si posteriormente
-            // se habilitan consultas administrativas.
+            // Se calculan primero en variables y no se lee
+            // Button.Visible: mientras el formulario no se muestra,
+            // esa propiedad siempre devuelve false y el reacomodo
+            // no funcionaría.
             // -----------------------------------------------------
 
-            btnInventario.Visible =
+            bool esAdmin = SesionService.EsAdministrador();
+            bool esMaestro = SesionService.TieneAccesoTotal();
+
+            // CU-03 Gestionar productos
+            bool verProductos =
+                SesionService.PuedeGestionarProductos() ||
+                esAdmin ||
+                esMaestro;
+
+            // Inventario (Inventario opera, Ventas consulta)
+            bool verInventario =
                 SesionService.PuedeConsultarInventario() ||
                 SesionService.PuedeRegistrarIngreso() ||
-                SesionService.PuedeGestionarDiferencias();
+                SesionService.PuedeGestionarDiferencias() ||
+                esMaestro;
 
-            // -----------------------------------------------------
-            // VENTAS
-            // -----------------------------------------------------
-
-            btnVentas.Visible =
+            bool verVentas =
                 SesionService.PuedeGestionarVentas() ||
                 SesionService.PuedeGestionarClientes() ||
-                SesionService.PuedeGestionarProformas();
+                SesionService.PuedeGestionarProformas() ||
+                esMaestro;
 
-            // -----------------------------------------------------
-            // USUARIOS
             // CU-02 Gestionar usuarios
-            // -----------------------------------------------------
+            bool verUsuarios =
+                SesionService.PuedeVerUsuarios() ||
+                esAdmin ||
+                esMaestro;
 
-            btnEmpleados.Visible =
-                SesionService.PuedeVerUsuarios();
-
-            // -----------------------------------------------------
-            // REPORTES
             // CU-17 Generar reportes
-            // -----------------------------------------------------
-
-            btnReportes.Visible =
+            bool verReportes =
                 SesionService.PuedeGenerarReportes() ||
-                SesionService.PuedeGenerarReporteTurno();
+                SesionService.PuedeGenerarReporteTurno() ||
+                esAdmin ||
+                esMaestro;
 
-            // -----------------------------------------------------
-            // HISTORIAL
             // CU-18 Consultar historial de operaciones
-            // -----------------------------------------------------
-
-            btnHistorial.Visible =
+            bool verHistorial =
                 SesionService.PuedeConsultarHistorial() ||
-                SesionService.PuedeConsultarMovimientos();
+                SesionService.PuedeConsultarMovimientos() ||
+                esMaestro;
 
             // Solicitudes: todos los perfiles
-            btnSolicitudes.Visible = true;
+            bool verSolicitudes = true;
 
-            // -----------------------------------------------------
-            // ADMINISTRADOR
-            // -----------------------------------------------------
+            btnProductos.Visible = verProductos;
+            btnInventario.Visible = verInventario;
+            btnVentas.Visible = verVentas;
+            btnEmpleados.Visible = verUsuarios;
+            btnReportes.Visible = verReportes;
+            btnHistorial.Visible = verHistorial;
+            btnSolicitudes.Visible = verSolicitudes;
 
-            if (SesionService.EsAdministrador())
+            // Acomoda solo los botones permitidos, sin huecos.
+            ReacomodarBotones(
+                new[] { btnProductos, btnInventario, btnVentas,
+                        btnEmpleados, btnReportes, btnHistorial,
+                        btnSolicitudes },
+                new[] { verProductos, verInventario, verVentas,
+                        verUsuarios, verReportes, verHistorial,
+                        verSolicitudes });
+        }
+
+        // =========================================================
+        // DISTRIBUCIÓN DE BOTONES
+        // =========================================================
+
+        // Distribuye los botones permitidos en filas de hasta 4,
+        // centradas, sin dejar espacios vacíos. Cerrar sesión y Salir
+        // quedan centrados en una fila propia, debajo de las opciones.
+        private void ReacomodarBotones(
+            Button[] botones,
+            bool[] permitidos)
+        {
+            const int ancho = 200;
+            const int alto = 80;
+            const int separacion = 35;
+            const int columnas = 4;
+            const int inicioY = 205;
+            const int pasoY = 115;
+
+            var visibles = new System.Collections.Generic.List<Button>();
+
+            for (int i = 0; i < botones.Length; i++)
             {
-                btnProductos.Visible = true;
-                btnEmpleados.Visible = true;
-                btnReportes.Visible = true;
+                if (permitidos[i])
+                    visibles.Add(botones[i]);
             }
 
-            // -----------------------------------------------------
-            // MASTER
-            // -----------------------------------------------------
+            int filas = (visibles.Count + columnas - 1) / columnas;
 
-            if (SesionService.TieneAccesoTotal())
+            for (int fila = 0; fila < filas; fila++)
             {
-                btnProductos.Visible = true;
-                btnInventario.Visible = true;
-                btnVentas.Visible = true;
-                btnEmpleados.Visible = true;
-                btnReportes.Visible = true;
-                btnHistorial.Visible = true;
-                btnSolicitudes.Visible = true;
+                int primero = fila * columnas;
+                int cantidad = Math.Min(columnas, visibles.Count - primero);
+
+                int x = XInicialCentrado(cantidad, ancho, separacion);
+                int y = inicioY + (fila * pasoY);
+
+                for (int k = 0; k < cantidad; k++)
+                {
+                    visibles[primero + k].Location =
+                        new Point(x + (k * (ancho + separacion)), y);
+                }
             }
+
+            // Fila de sesión: siempre debajo de las opciones principales.
+            int ySesion = inicioY + (filas * pasoY) + 5;
+            int xSesion = XInicialCentrado(2, ancho, separacion);
+
+            btnCerrarSesion.Location = new Point(xSesion, ySesion);
+            btnSalir.Location =
+                new Point(xSesion + ancho + separacion, ySesion);
+        }
+
+        private int XInicialCentrado(
+            int cantidad,
+            int ancho,
+            int separacion)
+        {
+            int total = (cantidad * ancho) + ((cantidad - 1) * separacion);
+
+            return Math.Max(0, (ClientSize.Width - total) / 2);
         }
 
         // =========================================================

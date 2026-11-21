@@ -55,7 +55,7 @@ namespace FediCasa.Services
             Empleado empleado = empleados.FirstOrDefault(e =>
                 e.Usuario.Equals(
                     usuario.Trim(),
-                    StringComparison.OrdinalIgnoreCase)
+                    StringComparison.Ordinal)
                 &&
                 e.Contraseña == contraseña);
 

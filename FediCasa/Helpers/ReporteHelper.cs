@@ -668,6 +668,7 @@ namespace FediCasa.Helpers
         /// </summary>
         public static string GenerarReporteTurno(
             Empleado empleado,
+            DateTime inicioTurno,
             List<Venta> ventas,
             List<Solicitud> solicitudes,
             List<Movimiento> movimientos)
@@ -675,7 +676,6 @@ namespace FediCasa.Helpers
             InicializarCarpetaReportes();
 
             DateTime ahora = DateTime.Now;
-            DateTime hoy = ahora.Date;
             string usuario = empleado.Usuario;
             bool esVentas = empleado.Cargo.Equals(
                 "Ventas", StringComparison.OrdinalIgnoreCase);
@@ -689,8 +689,9 @@ namespace FediCasa.Helpers
             sb.AppendLine("Usuario : " + usuario);
             sb.AppendLine("Nombre  : " + empleado.NombreCompleto);
             sb.AppendLine("Rol     : " + empleado.Cargo);
-            sb.AppendLine("Turno   : " + hoy.ToString("dd/MM/yyyy") +
-                          " (00:00 hasta " + ahora.ToString("HH:mm:ss") + ")");
+            sb.AppendLine("Turno   : " +
+                          inicioTurno.ToString("dd/MM/yyyy HH:mm:ss") +
+                          " hasta " + ahora.ToString("dd/MM/yyyy HH:mm:ss"));
             sb.AppendLine("Generado: " + ahora.ToString("dd/MM/yyyy HH:mm:ss"));
             sb.AppendLine();
 
@@ -701,7 +702,7 @@ namespace FediCasa.Helpers
                     .Where(v => v.UsuarioVendedor.Equals(
                                     usuario,
                                     StringComparison.OrdinalIgnoreCase) &&
-                                v.Fecha.Date == hoy)
+                                FechaDeVenta(v) >= inicioTurno)
                     .GroupBy(v => v.IdVenta)
                     .OrderBy(g => g.First().Fecha)
                     .ToList();
@@ -758,7 +759,7 @@ namespace FediCasa.Helpers
             {
                 // ----- INVENTARIO: operaciones de stock aplicadas -----
                 var ops = movimientos
-                    .Where(m => m.Fecha.Date == hoy &&
+                    .Where(m => m.Fecha >= inicioTurno &&
                                 (m.Tipo == "Ingreso" ||
                                  m.Tipo == "Salida" ||
                                  m.Tipo == "Diferencia") &&
@@ -791,36 +792,10 @@ namespace FediCasa.Helpers
             }
 
             // ----- SOLICITUDES E INCIDENCIAS (ambos roles) -----
-            var misSolicitudes = solicitudes
-                .Where(s => s.Solicitante.Equals(
-                                usuario,
-                                StringComparison.OrdinalIgnoreCase) &&
-                            s.Fecha.Date == hoy)
-                .OrderBy(s => s.Fecha)
-                .ToList();
-
-            sb.AppendLine("SOLICITUDES E INCIDENCIAS ENVIADAS");
+            sb.AppendLine("SOLICITUDES E INCIDENCIAS DEL TURNO");
             sb.AppendLine(new string('-', 70));
 
-            if (misSolicitudes.Count == 0)
-                sb.AppendLine("Sin solicitudes ni incidencias en este turno.");
-
-            foreach (Solicitud s in misSolicitudes)
-            {
-                sb.AppendLine(
-                    s.Fecha.ToString("HH:mm:ss") +
-                    " | N.° " + s.Id +
-                    " | " + s.Tipo +
-                    " | " + s.Estado +
-                    (s.CodigoProducto != string.Empty
-                        ? " | Prod.: " + s.CodigoProducto + " x " + s.Cantidad
-                        : ""));
-                sb.AppendLine("      Motivo: " + s.Motivo);
-
-                if (s.Comentario != string.Empty)
-                    sb.AppendLine("      Revisión (" + s.Revisor + "): " +
-                                  s.Comentario);
-            }
+            SeccionSolicitudesPropias(sb, solicitudes, usuario, inicioTurno);
 
             sb.AppendLine();
             sb.AppendLine(raya);
@@ -984,8 +959,6 @@ namespace FediCasa.Helpers
                           (productos.Count - activos.Count));
             sb.AppendLine("Unidades en stock   : " +
                           activos.Sum(p => p.Stock));
-            sb.AppendLine("Valor del inventario: S/ " +
-                          activos.Sum(p => p.Precio * p.Stock).ToString("0.00"));
             sb.AppendLine("Con bajo stock      : " +
                           activos.Count(p => p.EstaEnStockBajo()));
             sb.AppendLine("Agotados            : " +
@@ -1008,6 +981,142 @@ namespace FediCasa.Helpers
                 sb.AppendLine(
                     a.Fecha.ToString("HH:mm:ss") + " | " +
                     a.Accion + " | " + a.Detalle);
+            }
+        }
+
+        // Línea de una solicitud con su estado actual y, si ya fue
+        // revisada, la respuesta del revisor (aprobada, rechazada,
+        // resuelta o derivada).
+        private static void LineaSolicitud(StringBuilder sb, Solicitud s)
+        {
+            sb.AppendLine(
+                s.Fecha.ToString("dd/MM HH:mm") +
+                " | N.° " + s.Id + " | " + s.Tipo + " | " + s.Estado +
+                (s.CodigoProducto != string.Empty
+                    ? " | Prod.: " + s.CodigoProducto + " x " + s.Cantidad
+                    : ""));
+            sb.AppendLine("      Motivo: " + s.Motivo);
+
+            if (s.Estado != Solicitud.Pendiente && s.Revisor != string.Empty)
+            {
+                sb.AppendLine(
+                    "      Respuesta de " + s.Revisor + " (" + s.Estado + ")" +
+                    (s.FechaRevision.Year > 2000
+                        ? " el " + s.FechaRevision.ToString("dd/MM HH:mm:ss")
+                        : "") +
+                    (s.Comentario != string.Empty
+                        ? ": " + s.Comentario
+                        : ""));
+            }
+        }
+
+        // Solicitudes del propio usuario (Ventas / Inventario):
+        // actividad de la sesión + estado actual de las pendientes.
+        // Cada solicitud aparece una sola vez en el detalle.
+        private static void SeccionSolicitudesPropias(
+            StringBuilder sb,
+            List<Solicitud> solicitudes,
+            string usuario,
+            DateTime inicioTurno)
+        {
+            var mias = solicitudes
+                .Where(s => s.Solicitante.Equals(
+                                usuario,
+                                StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            // 1) Creadas durante la sesión (con su estado/respuesta actual).
+            Subtitulo(sb, "CREADAS EN ESTE TURNO");
+
+            var creadas = mias
+                .Where(s => s.Fecha >= inicioTurno)
+                .OrderBy(s => s.Fecha)
+                .ToList();
+
+            if (creadas.Count == 0)
+                sb.AppendLine("Sin solicitudes ni incidencias en este turno.");
+
+            foreach (Solicitud s in creadas)
+                LineaSolicitud(sb, s);
+
+            // 2) Creadas antes, pero respondidas durante la sesión.
+            Subtitulo(sb, "DE TURNOS ANTERIORES, RESPONDIDAS EN ESTE TURNO");
+
+            var anteriores = mias
+                .Where(s => s.Fecha < inicioTurno &&
+                            s.FechaRevision >= inicioTurno)
+                .OrderBy(s => s.FechaRevision)
+                .ToList();
+
+            if (anteriores.Count == 0)
+                sb.AppendLine("Ninguna respuesta a solicitudes anteriores.");
+
+            foreach (Solicitud s in anteriores)
+                LineaSolicitud(sb, s);
+
+            // 3) Resumen de respuestas recibidas en la sesión (sin repetir).
+            Subtitulo(sb, "RESUMEN DE RESPUESTAS DEL TURNO");
+
+            var respondidas = mias
+                .Where(s => s.FechaRevision >= inicioTurno)
+                .ToList();
+
+            sb.AppendLine("Aprobadas  : " +
+                          respondidas.Count(s => s.Estado == Solicitud.Aprobada));
+            sb.AppendLine("Rechazadas : " +
+                          respondidas.Count(s => s.Estado == Solicitud.Rechazada));
+            sb.AppendLine("Resueltas  : " +
+                          respondidas.Count(s => s.Estado == Solicitud.Resuelta));
+            sb.AppendLine("Derivadas  : " +
+                          respondidas.Count(s => s.Estado == Solicitud.Derivada));
+
+            // 4) Estado actual: pendientes sin importar cuándo se crearon.
+            Subtitulo(sb, "PENDIENTES (ESTADO ACTUAL)");
+
+            var pendientes = mias
+                .Where(s => s.Estado == Solicitud.Pendiente)
+                .OrderBy(s => s.Fecha)
+                .ToList();
+
+            if (pendientes.Count == 0)
+            {
+                sb.AppendLine("No hay solicitudes pendientes.");
+            }
+            else
+            {
+                sb.AppendLine("Pendientes: " + pendientes.Count +
+                              " (de turnos anteriores: " +
+                              pendientes.Count(s => s.Fecha < inicioTurno) + ")");
+
+                foreach (Solicitud s in pendientes.Where(s => s.Fecha < inicioTurno))
+                    LineaSolicitud(sb, s);
+            }
+        }
+
+        // Solicitudes que el revisor resolvió durante su sesión.
+        private static void ListaSolicitudesResueltas(
+            StringBuilder sb,
+            List<Solicitud> lista,
+            string mensajeVacio)
+        {
+            if (lista.Count == 0)
+            {
+                sb.AppendLine(mensajeVacio);
+                return;
+            }
+
+            foreach (Solicitud s in lista)
+            {
+                sb.AppendLine(
+                    s.FechaRevision.ToString("HH:mm:ss") +
+                    " | N.° " + s.Id + " | " + s.Tipo +
+                    (s.CodigoProducto != string.Empty
+                        ? " (" + s.CodigoProducto + " x " + s.Cantidad + ")"
+                        : "") +
+                    " | de " + s.Solicitante);
+
+                if (s.Comentario != string.Empty)
+                    sb.AppendLine("      Comentario: " + s.Comentario);
             }
         }
 
@@ -1101,7 +1210,9 @@ namespace FediCasa.Helpers
                 .OrderBy(s => s.Fecha)
                 .ToList();
 
-            sb.AppendLine("Pendientes de revisión : " + pendientes.Count);
+            sb.AppendLine(pendientes.Count == 0
+                ? "Pendientes de revisión : 0 (No hay solicitudes pendientes)"
+                : "Pendientes de revisión : " + pendientes.Count);
             sb.AppendLine("Derivadas a admin      : " +
                           solicitudes.Count(s => s.Estado == Solicitud.Derivada));
             sb.AppendLine();
@@ -1125,11 +1236,43 @@ namespace FediCasa.Helpers
                 actividades.Where(a => a.Accion.StartsWith("Producto")).ToList(),
                 "No realizó cambios en productos durante el turno.");
 
-            Subtitulo(sb, "SOLICITUDES REVISADAS");
+            // Solo lo resuelto por este administrador desde que inició sesión.
+            var aprobadas = solicitudes
+                .Where(s => s.Estado == Solicitud.Aprobada &&
+                            s.Revisor.Equals(
+                                empleado.Usuario,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            s.FechaRevision >= inicioTurno)
+                .OrderBy(s => s.FechaRevision)
+                .ToList();
+
+            var rechazadas = solicitudes
+                .Where(s => s.Estado == Solicitud.Rechazada &&
+                            s.Revisor.Equals(
+                                empleado.Usuario,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            s.FechaRevision >= inicioTurno)
+                .OrderBy(s => s.FechaRevision)
+                .ToList();
+
+            Subtitulo(sb, "SOLICITUDES APROBADAS EN EL TURNO (" + aprobadas.Count + ")");
+            ListaSolicitudesResueltas(
+                sb, aprobadas, "No aprobó solicitudes durante el turno.");
+
+            Subtitulo(sb, "SOLICITUDES RECHAZADAS EN EL TURNO (" + rechazadas.Count + ")");
+            ListaSolicitudesResueltas(
+                sb, rechazadas, "No rechazó solicitudes durante el turno.");
+
+            // Incidencias resueltas o derivadas (no son aprobación/rechazo).
+            Subtitulo(sb, "INCIDENCIAS RESUELTAS O DERIVADAS EN EL TURNO");
             ListaActividades(
                 sb,
-                actividades.Where(a => a.Accion.StartsWith("Solicitud")).ToList(),
-                "No revisó solicitudes durante el turno.");
+                actividades
+                    .Where(a => a.Accion.StartsWith("Solicitud") &&
+                                !a.Accion.ToLower().Contains("aprobada") &&
+                                !a.Accion.ToLower().Contains("rechazada"))
+                    .ToList(),
+                "No resolvió ni derivó incidencias durante el turno.");
 
             Pie(sb);
 
@@ -1215,42 +1358,11 @@ namespace FediCasa.Helpers
                 sb.AppendLine("Diferencias : " + ops.Count(m => m.Tipo == "Diferencia"));
             }
 
-            // Solicitudes creadas en el turno y su estado actual.
+            // Solicitudes creadas en el turno, respuestas del Administrador
+            // recibidas en el turno y pendientes actuales.
             Bloque(sb, "SOLICITUDES E INCIDENCIAS DEL TURNO");
 
-            var misSolicitudes = solicitudes
-                .Where(s => s.Solicitante.Equals(
-                                usuario,
-                                StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            var delTurno = misSolicitudes
-                .Where(s => s.Fecha >= inicioTurno)
-                .OrderBy(s => s.Fecha)
-                .ToList();
-
-            if (delTurno.Count == 0)
-                sb.AppendLine("Sin solicitudes ni incidencias en este turno.");
-
-            foreach (Solicitud s in delTurno)
-            {
-                sb.AppendLine(
-                    s.Fecha.ToString("HH:mm:ss") +
-                    " | N.° " + s.Id + " | " + s.Tipo + " | " + s.Estado +
-                    (s.CodigoProducto != string.Empty
-                        ? " | Prod.: " + s.CodigoProducto + " x " + s.Cantidad
-                        : ""));
-                sb.AppendLine("      Motivo: " + s.Motivo);
-
-                if (s.Comentario != string.Empty)
-                    sb.AppendLine("      Revisión (" + s.Revisor + "): " +
-                                  s.Comentario);
-            }
-
-            sb.AppendLine();
-            sb.AppendLine("Solicitudes anteriores aún pendientes: " +
-                          misSolicitudes.Count(s => s.Fecha < inicioTurno &&
-                                                    s.Estado == Solicitud.Pendiente));
+            SeccionSolicitudesPropias(sb, solicitudes, usuario, inicioTurno);
 
             Pie(sb);
 

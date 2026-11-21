@@ -162,6 +162,7 @@ namespace FediCasa.Services
             s.Estado = Solicitud.Aprobada;
             s.Revisor = SesionService.ObtenerUsuarioActual();
             s.Comentario = comentario?.Trim() ?? string.Empty;
+            s.FechaRevision = DateTime.Now;
 
             ArchivoHelper.GuardarSolicitudes(todas);
 
@@ -268,6 +269,7 @@ namespace FediCasa.Services
             s.Estado = nuevoEstado;
             s.Revisor = SesionService.ObtenerUsuarioActual();
             s.Comentario = comentario.Trim();
+            s.FechaRevision = DateTime.Now;
 
             ArchivoHelper.GuardarSolicitudes(todas);
 

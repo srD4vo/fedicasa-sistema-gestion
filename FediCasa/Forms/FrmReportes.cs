@@ -218,6 +218,7 @@ namespace FediCasa.Forms
                     ruta =
                         ReporteHelper.GenerarReporteTurno(
                             empleado,
+                            SesionService.InicioTurno,
                             VentaService.ObtenerVentas(),
                             SolicitudService.Obtener(),
                             MovimientoService.Obtener());
@@ -272,7 +273,7 @@ namespace FediCasa.Forms
             {
                 rtbReporte.Text =
                     "Presione \"Generar reporte\" para ver el resumen " +
-                    "de sus operaciones de hoy.";
+                    "de lo realizado en su sesión actual.";
                 return;
             }
 

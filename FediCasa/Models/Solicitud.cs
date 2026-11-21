@@ -34,6 +34,11 @@ namespace FediCasa.Models
         public string Revisor { get; set; }
         public string Comentario { get; set; }
 
+        // Momento en que se aprobó, rechazó, derivó o resolvió la solicitud.
+        // Vale DateTime.MinValue mientras no haya sido revisada (y en
+        // solicitudes antiguas guardadas sin este dato).
+        public DateTime FechaRevision { get; set; }
+
         public Solicitud()
         {
             Fecha = DateTime.Now;
@@ -44,6 +49,7 @@ namespace FediCasa.Models
             Solicitante = string.Empty;
             Revisor = string.Empty;
             Comentario = string.Empty;
+            FechaRevision = DateTime.MinValue;
         }
 
         // Ingreso, Salida y Diferencia modifican el stock al aprobarse.
@@ -82,7 +88,10 @@ namespace FediCasa.Models
                 Limpiar(Estado),
                 Limpiar(Solicitante),
                 Limpiar(Revisor),
-                Limpiar(Comentario));
+                Limpiar(Comentario),
+                FechaRevision == DateTime.MinValue
+                    ? string.Empty
+                    : FechaRevision.ToString("O", CultureInfo.InvariantCulture));
         }
 
         public static Solicitud DesdeTexto(string linea)
@@ -104,6 +113,18 @@ namespace FediCasa.Models
                     out DateTime fecha))
                 return null;
 
+            // Campo opcional (11.°): las líneas antiguas no lo tienen.
+            DateTime fechaRevision = DateTime.MinValue;
+
+            if (p.Length >= 11)
+            {
+                DateTime.TryParse(
+                    p[10],
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out fechaRevision);
+            }
+
             return new Solicitud
             {
                 Id = id,
@@ -115,7 +136,8 @@ namespace FediCasa.Models
                 Estado = p[6],
                 Solicitante = p[7],
                 Revisor = p[8],
-                Comentario = p[9]
+                Comentario = p[9],
+                FechaRevision = fechaRevision
             };
         }
     }
