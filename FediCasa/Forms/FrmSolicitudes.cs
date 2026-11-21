@@ -22,6 +22,9 @@ namespace FediCasa.Forms
         private TextBox txtCantidad;
         private TextBox txtMotivo;
         private Button btnEnviar;
+        private ListBox lstSugerencias;
+        private Label lblProductoInfo;
+        private bool ignorarCambioTexto;
 
         private TextBox txtComentario;
         private Button btnAprobar;
@@ -186,17 +189,31 @@ namespace FediCasa.Forms
 
             grp.Controls.Add(new Label
             {
-                Text = "Código:",
+                Text = "Producto:",
                 AutoSize = true,
-                Location = new Point(350, 35)
+                Location = new Point(335, 35)
             });
 
             txtCodigo = new TextBox
             {
-                Location = new Point(420, 31),
-                Size = new Size(110, 28)
+                Location = new Point(410, 31),
+                Size = new Size(130, 28),
+                PlaceholderText = "código o nombre"
             };
             grp.Controls.Add(txtCodigo);
+
+            // Resumen del producto elegido (nombre, stock...).
+            lblProductoInfo = new Label
+            {
+                AutoSize = false,
+                Size = new Size(665, 20),
+                Location = new Point(15, 60),
+                ForeColor = Color.DimGray,
+                Font = new Font("Segoe UI", 9F)
+            };
+            grp.Controls.Add(lblProductoInfo);
+
+            CrearBuscadorProducto();
 
             grp.Controls.Add(new Label
             {
@@ -250,13 +267,199 @@ namespace FediCasa.Forms
             Controls.Add(grp);
         }
 
+        // ---------------------------------------------------------
+        // BÚSQUEDA DE PRODUCTO (por código o nombre)
+        // ---------------------------------------------------------
+
+        private class ItemBusqueda
+        {
+            public Producto Producto;
+
+            public override string ToString()
+            {
+                return Producto.Nombre +
+                       "  (" + Producto.Codigo + ")  -  Stock " +
+                       Producto.Stock +
+                       (Producto.Activo ? "" : "  -  INACTIVO");
+            }
+        }
+
+        private void CrearBuscadorProducto()
+        {
+            lstSugerencias = new ListBox
+            {
+                Visible = false,
+                Width = 450,
+                Font = new Font("Segoe UI", 10),
+                IntegralHeight = false,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            Controls.Add(lstSugerencias);
+
+            txtCodigo.TextChanged += (s, e) => ActualizarSugerencias();
+
+            txtCodigo.Leave += (s, e) => BeginInvoke(new Action(() =>
+            {
+                if (!lstSugerencias.Focused)
+                    lstSugerencias.Visible = false;
+            }));
+
+            txtCodigo.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Down && lstSugerencias.Visible)
+                {
+                    e.SuppressKeyPress = true;
+                    lstSugerencias.Focus();
+                }
+                else if (e.KeyCode == Keys.Escape)
+                {
+                    lstSugerencias.Visible = false;
+                }
+                else if (e.KeyCode == Keys.Enter &&
+                         lstSugerencias.Visible &&
+                         lstSugerencias.SelectedItem != null)
+                {
+                    e.SuppressKeyPress = true;
+                    ElegirSugerencia();
+                }
+            };
+
+            lstSugerencias.Click += (s, e) => ElegirSugerencia();
+
+            lstSugerencias.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    e.SuppressKeyPress = true;
+                    ElegirSugerencia();
+                }
+                else if (e.KeyCode == Keys.Escape)
+                {
+                    lstSugerencias.Visible = false;
+                    txtCodigo.Focus();
+                }
+            };
+        }
+
+        private void ActualizarSugerencias()
+        {
+            if (ignorarCambioTexto)
+                return;
+
+            string texto = txtCodigo.Text.Trim();
+
+            lstSugerencias.Items.Clear();
+
+            if (texto == string.Empty)
+            {
+                lstSugerencias.Visible = false;
+                lblProductoInfo.Text = string.Empty;
+                return;
+            }
+
+            // Si coincide exactamente con un código, se muestra su resumen.
+            MostrarInfoProducto(ProductoService.BuscarPorCodigo(texto));
+
+            var resultados = ProductoService.BuscarTodos(texto)
+                .OrderByDescending(p => p.Codigo.Equals(
+                    texto, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(p => p.Nombre.StartsWith(
+                    texto, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(p => p.Nombre)
+                .Take(8)
+                .ToList();
+
+            if (resultados.Count == 0)
+            {
+                lstSugerencias.Visible = false;
+                return;
+            }
+
+            foreach (Producto p in resultados)
+                lstSugerencias.Items.Add(new ItemBusqueda { Producto = p });
+
+            lstSugerencias.Location = PointToClient(
+                txtCodigo.Parent.PointToScreen(
+                    new Point(txtCodigo.Left, txtCodigo.Bottom)));
+
+            lstSugerencias.Height = resultados.Count * 22 + 6;
+            lstSugerencias.SelectedIndex = 0;
+            lstSugerencias.Visible = true;
+            lstSugerencias.BringToFront();
+        }
+
+        private void ElegirSugerencia()
+        {
+            ItemBusqueda item = lstSugerencias.SelectedItem as ItemBusqueda;
+
+            if (item == null)
+                return;
+
+            ignorarCambioTexto = true;
+            txtCodigo.Text = item.Producto.Codigo;
+            ignorarCambioTexto = false;
+
+            lstSugerencias.Visible = false;
+            MostrarInfoProducto(item.Producto);
+
+            txtCantidad.Focus();
+            txtCantidad.SelectAll();
+        }
+
+        private void MostrarInfoProducto(Producto p)
+        {
+            lblProductoInfo.Text = p == null
+                ? string.Empty
+                : "Producto: " + p.Nombre + "  |  Stock actual: " +
+                  p.Stock + " " + p.UnidadMedida +
+                  (p.Activo ? "" : "  |  (inactivo)");
+        }
+
+        // Devuelve el código a usar, o null si hay que elegir uno.
+        private string ResolverCodigoProducto()
+        {
+            string texto = txtCodigo.Text.Trim();
+
+            if (texto == string.Empty ||
+                ProductoService.BuscarPorCodigo(texto) != null)
+                return texto;
+
+            var coincidencias = ProductoService.BuscarTodos(texto);
+
+            if (coincidencias.Count == 1)
+                return coincidencias[0].Codigo;
+
+            if (coincidencias.Count > 1)
+            {
+                ActualizarSugerencias();
+
+                MessageBox.Show(
+                    "Hay varios productos con ese nombre.\n" +
+                    "Elija uno de la lista.",
+                    "Solicitudes",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+
+                return null;
+            }
+
+            return texto; // el servicio avisará que el código no existe
+        }
+
         private void BtnEnviar_Click(object sender, EventArgs e)
         {
             int.TryParse(txtCantidad.Text.Trim(), out int cantidad);
 
+            // Si escribió un nombre en vez del código, se busca el producto.
+            string codigo = ResolverCodigoProducto();
+
+            if (codigo == null)
+                return;
+
             if (!SolicitudService.Crear(
                     cboTipo.SelectedItem.ToString(),
-                    txtCodigo.Text,
+                    codigo,
                     cantidad,
                     txtMotivo.Text,
                     out string mensaje))
@@ -267,6 +470,7 @@ namespace FediCasa.Forms
             }
 
             txtCodigo.Clear();
+            lblProductoInfo.Text = string.Empty;
             txtCantidad.Text = "0";
             txtMotivo.Clear();
             Cargar();
