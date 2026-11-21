@@ -214,6 +214,26 @@ namespace FediCasa.Services
                 : CopiarProducto(producto);
         }
 
+        public static Producto BuscarActivoPorCodigo(
+            string codigo)
+        {
+            Inicializar();
+
+            if (string.IsNullOrWhiteSpace(codigo))
+                return null;
+
+            Producto producto =
+                productos.FirstOrDefault(p =>
+                    p.Activo &&
+                    p.Codigo.Equals(
+                        codigo.Trim(),
+                        StringComparison.OrdinalIgnoreCase));
+
+            return producto == null
+                ? null
+                : CopiarProducto(producto);
+        }
+
         public static List<Producto> Buscar(
             string texto)
         {

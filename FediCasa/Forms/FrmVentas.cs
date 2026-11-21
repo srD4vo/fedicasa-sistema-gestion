@@ -830,9 +830,9 @@ namespace FediCasa.Forms
                 return;
             }
 
-            // Coincidencia exacta de código: muestra su resumen.
+            // Coincidencia exacta de código: muestra su resumen (solo si está activo).
             MostrarInfoProducto(
-                ProductoService.BuscarPorCodigo(texto));
+                ProductoService.BuscarActivoPorCodigo(texto));
 
             var resultados =
                 ProductoService.Buscar(texto)
@@ -997,7 +997,7 @@ namespace FediCasa.Forms
             // -----------------------------------------------------
 
             Producto producto =
-                ProductoService.BuscarPorCodigo(
+                ProductoService.BuscarActivoPorCodigo(
                     codigo);
 
             // Si escribió un nombre en vez del código.

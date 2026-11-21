@@ -1229,5 +1229,19 @@ namespace FediCasa.Services
 
             Inicializar();
         }
+
+        // ============================================================
+        // CONSULTAS DE PRODUCTOS ORIENTADAS A LA VENTA
+        // ============================================================
+
+        public static Producto BuscarProductoActivo(string codigo)
+        {
+            return ProductoService.BuscarActivoPorCodigo(codigo);
+        }
+
+        public static List<Producto> BuscarProductosActivos(string texto)
+        {
+            return ProductoService.Buscar(texto);
+        }
     }
 }
