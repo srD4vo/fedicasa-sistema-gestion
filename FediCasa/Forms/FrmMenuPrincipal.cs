@@ -309,7 +309,8 @@ namespace FediCasa.Forms
             // -----------------------------------------------------
 
             btnReportes.Visible =
-                SesionService.PuedeGenerarReportes();
+                SesionService.PuedeGenerarReportes() ||
+                SesionService.PuedeGenerarReporteTurno();
 
             // -----------------------------------------------------
             // HISTORIAL
@@ -465,7 +466,8 @@ namespace FediCasa.Forms
             object sender,
             EventArgs e)
         {
-            if (!SesionService.PuedeGenerarReportes())
+            if (!SesionService.PuedeGenerarReportes() &&
+                !SesionService.PuedeGenerarReporteTurno())
             {
                 MostrarAccesoDenegado();
                 return;

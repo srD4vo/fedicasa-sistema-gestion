@@ -15,34 +15,34 @@ namespace FediCasa.Forms
         // CONTROLES
         // =========================================================
 
-        private TextBox txtCodigoProducto;
-        private TextBox txtCantidad;
-        private TextBox txtDocumentoCliente;
-        private TextBox txtNombreCliente;
+        private TextBox txtCodigoProducto = null!;
+        private TextBox txtCantidad = null!;
+        private TextBox txtDocumentoCliente = null!;
+        private TextBox txtNombreCliente = null!;
 
-        private ComboBox cboFormaPago;
+        private ComboBox cboFormaPago = null!;
 
-        private Button btnAgregar;
-        private ListBox lstSugerencias;
-        private Label lblInfoProducto;
+        private Button btnAgregar = null!;
+        private ListBox lstSugerencias = null!;
+        private Label lblInfoProducto = null!;
         private bool ignorarCambioTexto;
-        private Button btnModificar;
-        private Button btnEliminar;
-        private Button btnVaciar;
-        private Button btnRegistrar;
-        private Button btnConfirmar;
-        private Button btnBoleta;
-        private Button btnAnular;
-        private Button btnCerrar;
+        private Button btnModificar = null!;
+        private Button btnEliminar = null!;
+        private Button btnVaciar = null!;
+        private Button btnRegistrar = null!;
+        private Button btnConfirmar = null!;
+        private Button btnBoleta = null!;
+        private Button btnAnular = null!;
+        private Button btnCerrar = null!;
 
-        private DataGridView dgvCarrito;
+        private DataGridView dgvCarrito = null!;
 
-        private Label lblSubtotal;
-        private Label lblIGV;
-        private Label lblTotal;
+        private Label lblSubtotal = null!;
+        private Label lblIGV = null!;
+        private Label lblTotal = null!;
 
-        private Label lblVendedor;
-        private Label lblEstadoVenta;
+        private Label lblVendedor = null!;
+        private Label lblEstadoVenta = null!;
 
         private int idVentaActual = 0;
 
@@ -194,8 +194,6 @@ namespace FediCasa.Forms
             btnAgregar.Click +=
                 BtnAgregar_Click;
 
-            CrearBuscadorProductos();
-
             lblInfoProducto =
                 new Label
                 {
@@ -214,12 +212,12 @@ namespace FediCasa.Forms
             grpProducto.Controls.AddRange(
                 new Control[]
                 {
-                    lblCodigo,
-                    txtCodigoProducto,
-                    lblCantidad,
-                    txtCantidad,
-                    btnAgregar,
-                    lblInfoProducto
+                lblCodigo,
+                txtCodigoProducto,
+                lblCantidad,
+                txtCantidad,
+                btnAgregar,
+                lblInfoProducto
                 });
 
             // =====================================================
@@ -275,6 +273,7 @@ namespace FediCasa.Forms
                         new Point(360, 35)
                 };
 
+            // Instanciamos el TextBox del cliente aquí para que exista
             txtNombreCliente =
                 new TextBox
                 {
@@ -315,11 +314,11 @@ namespace FediCasa.Forms
             cboFormaPago.Items.AddRange(
                 new object[]
                 {
-                    "Efectivo",
-                    "Yape",
-                    "Plin",
-                    "Tarjeta",
-                    "Transferencia"
+                "Efectivo",
+                "Yape",
+                "Plin",
+                "Tarjeta",
+                "Transferencia"
                 });
 
             if (cboFormaPago.Items.Count > 0)
@@ -358,15 +357,20 @@ namespace FediCasa.Forms
             grpCliente.Controls.AddRange(
                 new Control[]
                 {
-                    lblDocumento,
-                    txtDocumentoCliente,
-                    lblNombre,
-                    txtNombreCliente,
-                    lblPago,
-                    cboFormaPago,
-                    lblEstadoVenta,
-                    lblNota
+                lblDocumento,
+                txtDocumentoCliente,
+                lblNombre,
+                txtNombreCliente,
+                lblPago,
+                cboFormaPago,
+                lblEstadoVenta,
+                lblNota
                 });
+
+            // =========================================================
+            // INTERFAZ (Inicialización segura de eventos dependientes)
+            // =========================================================
+            CrearBuscadorProductos();
 
             // =====================================================
             // CARRITO
@@ -1599,10 +1603,28 @@ namespace FediCasa.Forms
         // VALIDAR DATOS DE VENTA
         // =========================================================
 
+        private bool EsNombreClienteValido(string nombre)
+        {
+            if (string.IsNullOrWhiteSpace(nombre))
+                return true; // se registrará como "Cliente general"
+
+            nombre = nombre.Trim();
+
+            if (nombre.Length < 2)
+                return false;
+
+            foreach (char c in nombre)
+            {
+                if (!char.IsLetter(c) && c != ' ')
+                    return false;
+            }
+
+            return true;
+        }
+
         private bool ValidarDatosVenta()
         {
-            if (string.IsNullOrWhiteSpace(
-                cboFormaPago.Text))
+            if (string.IsNullOrWhiteSpace(cboFormaPago.Text))
             {
                 MessageBox.Show(
                     "Seleccione una forma de pago.",
@@ -1613,19 +1635,51 @@ namespace FediCasa.Forms
                 return false;
             }
 
-            if (!string.IsNullOrWhiteSpace(
-                txtDocumentoCliente.Text))
+            // Validación del Nombre (actúa al registrar)
+            if (!EsNombreClienteValido(txtNombreCliente.Text))
             {
-                if (txtDocumentoCliente.Text.Length < 8)
+                MessageBox.Show(
+                    "El nombre del cliente no es válido.\n\n" +
+                    "Use solo letras y espacios (sin números ni símbolos).",
+                    "Validación",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                txtNombreCliente.Focus();
+                return false;
+            }
+
+            // Validación del Documento (actúa al registrar)
+            string documento = txtDocumentoCliente.Text.Trim();
+            if (!string.IsNullOrWhiteSpace(documento))
+            {
+                // Verificamos que sean solo números
+                foreach (char c in documento)
+                {
+                    if (!char.IsDigit(c))
+                    {
+                        MessageBox.Show(
+                            "El documento del cliente solo debe contener números.",
+                            "Validación",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+
+                        txtDocumentoCliente.Focus();
+                        return false;
+                    }
+                }
+
+                // Verificamos la cantidad de dígitos (por ejemplo, mínimo 8 para un DNI o 11 para RUC)
+                if (documento.Length != 8 && documento.Length != 11)
                 {
                     MessageBox.Show(
-                        "El documento del cliente no parece válido.",
+                        "El número de documento del cliente no parece válido.\n\n" +
+                        "Debe ser un DNI de 8 dígitos o un RUC de 11 dígitos.",
                         "Validación",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
 
                     txtDocumentoCliente.Focus();
-
                     return false;
                 }
             }

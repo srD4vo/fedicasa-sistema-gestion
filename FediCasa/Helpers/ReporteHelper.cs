@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -656,6 +656,186 @@ namespace FediCasa.Helpers
             InicializarCarpetaReportes();
 
             return CarpetaReportes;
+        }
+
+        // ─────────────────────────────────────────────
+        // REPORTE DE TURNO (Ventas e Inventario)
+        // ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Resume lo que el usuario hizo hoy (su turno) según su rol.
+        /// Usa las ventas, solicitudes y movimientos ya registrados.
+        /// </summary>
+        public static string GenerarReporteTurno(
+            Empleado empleado,
+            List<Venta> ventas,
+            List<Solicitud> solicitudes,
+            List<Movimiento> movimientos)
+        {
+            InicializarCarpetaReportes();
+
+            DateTime ahora = DateTime.Now;
+            DateTime hoy = ahora.Date;
+            string usuario = empleado.Usuario;
+            bool esVentas = empleado.Cargo.Equals(
+                "Ventas", StringComparison.OrdinalIgnoreCase);
+
+            StringBuilder sb = new StringBuilder();
+            string raya = new string('=', 70);
+
+            sb.AppendLine(raya);
+            sb.AppendLine("FEDICASA - REPORTE DE TURNO");
+            sb.AppendLine(raya);
+            sb.AppendLine("Usuario : " + usuario);
+            sb.AppendLine("Nombre  : " + empleado.NombreCompleto);
+            sb.AppendLine("Rol     : " + empleado.Cargo);
+            sb.AppendLine("Turno   : " + hoy.ToString("dd/MM/yyyy") +
+                          " (00:00 hasta " + ahora.ToString("HH:mm:ss") + ")");
+            sb.AppendLine("Generado: " + ahora.ToString("dd/MM/yyyy HH:mm:ss"));
+            sb.AppendLine();
+
+            if (esVentas)
+            {
+                // ----- VENTAS -----
+                var misVentas = ventas
+                    .Where(v => v.UsuarioVendedor.Equals(
+                                    usuario,
+                                    StringComparison.OrdinalIgnoreCase) &&
+                                v.Fecha.Date == hoy)
+                    .GroupBy(v => v.IdVenta)
+                    .OrderBy(g => g.First().Fecha)
+                    .ToList();
+
+                sb.AppendLine("VENTAS DEL TURNO");
+                sb.AppendLine(new string('-', 70));
+
+                if (misVentas.Count == 0)
+                    sb.AppendLine("Sin ventas registradas en este turno.");
+
+                int confirmadas = 0, anuladas = 0, registradas = 0;
+                double montoConfirmado = 0;
+
+                foreach (var g in misVentas)
+                {
+                    Venta primera = g.First();
+                    double total = g.Sum(v => v.Total);
+
+                    if (primera.Estado == "Confirmada")
+                    {
+                        confirmadas++;
+                        montoConfirmado += total;
+                    }
+                    else if (primera.Estado == "Anulada")
+                        anuladas++;
+                    else
+                        registradas++;
+
+                    sb.AppendLine(
+                        primera.Fecha.ToString("HH:mm:ss") +
+                        " | Venta N.° " + g.Key +
+                        " | " + primera.Estado +
+                        " | Cliente: " + primera.NombreCliente +
+                        " | Pago: " + primera.FormaPago +
+                        " | Total: S/ " + total.ToString("0.00"));
+
+                    foreach (Venta v in g)
+                    {
+                        sb.AppendLine(
+                            "      - " + v.CodigoProducto + " " +
+                            v.NombreProducto + " x " + v.Cantidad +
+                            " = S/ " + v.Subtotal.ToString("0.00"));
+                    }
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("Ventas confirmadas : " + confirmadas +
+                              " (S/ " + montoConfirmado.ToString("0.00") + ")");
+                sb.AppendLine("Ventas pendientes : " + registradas);
+                sb.AppendLine("Ventas anuladas   : " + anuladas);
+                sb.AppendLine();
+            }
+            else
+            {
+                // ----- INVENTARIO: operaciones de stock aplicadas -----
+                var ops = movimientos
+                    .Where(m => m.Fecha.Date == hoy &&
+                                (m.Tipo == "Ingreso" ||
+                                 m.Tipo == "Salida" ||
+                                 m.Tipo == "Diferencia") &&
+                                (m.Usuario.Equals(
+                                     usuario,
+                                     StringComparison.OrdinalIgnoreCase) ||
+                                 m.Detalle.Contains(
+                                     "solicitado por: " + usuario + ")")))
+                    .OrderBy(m => m.Fecha)
+                    .ToList();
+
+                sb.AppendLine("OPERACIONES DE STOCK APLICADAS");
+                sb.AppendLine(new string('-', 70));
+
+                if (ops.Count == 0)
+                    sb.AppendLine("Sin operaciones de stock en este turno.");
+
+                foreach (Movimiento m in ops)
+                {
+                    sb.AppendLine(
+                        m.Fecha.ToString("HH:mm:ss") +
+                        " | " + m.Tipo +
+                        " | " + m.CodigoProducto + " " + m.NombreProducto +
+                        " | Cant.: " + m.Cantidad.ToString("+0;-0;0") +
+                        " | Stock: " + m.StockResultante);
+                    sb.AppendLine("      " + m.Detalle);
+                }
+
+                sb.AppendLine();
+            }
+
+            // ----- SOLICITUDES E INCIDENCIAS (ambos roles) -----
+            var misSolicitudes = solicitudes
+                .Where(s => s.Solicitante.Equals(
+                                usuario,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            s.Fecha.Date == hoy)
+                .OrderBy(s => s.Fecha)
+                .ToList();
+
+            sb.AppendLine("SOLICITUDES E INCIDENCIAS ENVIADAS");
+            sb.AppendLine(new string('-', 70));
+
+            if (misSolicitudes.Count == 0)
+                sb.AppendLine("Sin solicitudes ni incidencias en este turno.");
+
+            foreach (Solicitud s in misSolicitudes)
+            {
+                sb.AppendLine(
+                    s.Fecha.ToString("HH:mm:ss") +
+                    " | N.° " + s.Id +
+                    " | " + s.Tipo +
+                    " | " + s.Estado +
+                    (s.CodigoProducto != string.Empty
+                        ? " | Prod.: " + s.CodigoProducto + " x " + s.Cantidad
+                        : ""));
+                sb.AppendLine("      Motivo: " + s.Motivo);
+
+                if (s.Comentario != string.Empty)
+                    sb.AppendLine("      Revisión (" + s.Revisor + "): " +
+                                  s.Comentario);
+            }
+
+            sb.AppendLine();
+            sb.AppendLine(raya);
+            sb.AppendLine("FIN DEL REPORTE");
+
+            string archivo =
+                "Reporte_Turno_" + usuario + "_" +
+                ahora.ToString("dd-MM-yyyy_HH-mm-ss") + ".txt";
+
+            File.WriteAllText(
+                Path.Combine(CarpetaReportes, archivo),
+                sb.ToString(),
+                Encoding.UTF8);
+
+            return Path.Combine(CarpetaReportes, archivo);
         }
     }
 }

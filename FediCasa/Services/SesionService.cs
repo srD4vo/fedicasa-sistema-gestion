@@ -372,6 +372,13 @@ namespace FediCasa.Services
                    EsAdministrador();
         }
 
+        // Ventas e Inventario: solo el reporte de su turno.
+        public static bool PuedeGenerarReporteTurno()
+        {
+            return EsVentas() ||
+                   EsInventario();
+        }
+
         // ---------------------------------------------------------
         // CU-18 Consultar historial de operaciones
         // ---------------------------------------------------------

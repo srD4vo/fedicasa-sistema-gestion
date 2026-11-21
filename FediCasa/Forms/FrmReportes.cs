@@ -27,6 +27,7 @@ namespace FediCasa.Forms
         public FrmReportes()
         {
             InicializarFormulario();
+            ConfigurarPorRol();
             CargarReportes();
         }
 
@@ -154,6 +155,79 @@ namespace FediCasa.Forms
             Controls.Add(rtbReporte);
         }
 
+        // Ventas e Inventario solo ven "Generar reporte" (su turno).
+        private bool EsSoloTurno()
+        {
+            return SesionService.PuedeGenerarReporteTurno();
+        }
+
+        private void ConfigurarPorRol()
+        {
+            if (!EsSoloTurno())
+                return;
+
+            btnActualizar.Visible = false;
+            btnVerReporte.Visible = false;
+            btnAbrirCarpeta.Visible = false;
+            lblReportes.Visible = false;
+            lstReportes.Visible = false;
+
+            btnCerrar.Location = new Point(210, 110);
+
+            rtbReporte.Location = new Point(40, 175);
+            rtbReporte.Size = new Size(1020, 460);
+
+            lblInformacion.Text =
+                "Genera el resumen de tus operaciones de hoy (turno).";
+        }
+
+        private void GenerarReporteDeTurno()
+        {
+            Empleado empleado =
+                SesionService.ObtenerEmpleadoActual();
+
+            if (empleado == null)
+            {
+                MessageBox.Show(
+                    "No existe una sesión activa.",
+                    "FediCasa",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            try
+            {
+                string ruta =
+                    ReporteHelper.GenerarReporteTurno(
+                        empleado,
+                        VentaService.ObtenerVentas(),
+                        SolicitudService.Obtener(),
+                        MovimientoService.Obtener());
+
+                rtbReporte.Text =
+                    ReporteHelper.LeerReporte(
+                        Path.GetFileName(ruta));
+
+                MessageBox.Show(
+                    "Reporte de turno generado y guardado.\n\n" +
+                    "Archivo:\n" + Path.GetFileName(ruta),
+                    "FediCasa",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "No se pudo generar el reporte.\n\n" +
+                    ex.Message,
+                    "Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
         private Button CrearBoton(
             string texto,
             Point ubicacion,
@@ -177,6 +251,14 @@ namespace FediCasa.Forms
             lstReportes.Items.Clear();
             rtbReporte.Clear();
 
+            if (EsSoloTurno())
+            {
+                rtbReporte.Text =
+                    "Presione \"Generar reporte\" para ver el resumen " +
+                    "de sus operaciones de hoy.";
+                return;
+            }
+
             List<string> reportes =
                 ReporteHelper.ObtenerReportesHistoricos();
 
@@ -198,6 +280,12 @@ namespace FediCasa.Forms
             object sender,
             EventArgs e)
         {
+            if (EsSoloTurno())
+            {
+                GenerarReporteDeTurno();
+                return;
+            }
+
             try
             {
                 List<Venta> ventas =
