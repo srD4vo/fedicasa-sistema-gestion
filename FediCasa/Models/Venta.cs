@@ -574,3 +574,5 @@ namespace FediCasa.Models
         }
     }
 }
+
+// TODO: Implementar estado Pago Pendiente para CR-001).
