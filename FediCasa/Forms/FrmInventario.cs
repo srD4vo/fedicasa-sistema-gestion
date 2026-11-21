@@ -38,6 +38,9 @@ namespace FediCasa.Forms
             Construir();
             ConfigurarPermisos();
             CargarProductos();
+
+            // Al volver a esta ventana se lee el stock actual de los archivos.
+            Activated += (s, e) => CargarProductos();
         }
 
         private void Construir()

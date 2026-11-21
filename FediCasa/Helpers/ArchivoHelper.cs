@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using FediCasa.Models;
 
 namespace FediCasa.Helpers
@@ -33,6 +35,109 @@ namespace FediCasa.Helpers
         }
 
         // =========================================================
+        // USO COMPARTIDO ENTRE VARIAS INSTANCIAS DEL PROGRAMA
+        // =========================================================
+
+        // Candado entre procesos: mientras una instancia modifica
+        // inventario o ventas, las demás esperan su turno.
+        private static readonly Mutex candadoDatos =
+            new Mutex(false, "FediCasa_Datos_Compartidos");
+
+        private class Candado : IDisposable
+        {
+            private bool tomado;
+
+            public Candado()
+            {
+                try
+                {
+                    tomado = candadoDatos.WaitOne(5000);
+                }
+                catch (AbandonedMutexException)
+                {
+                    tomado = true;
+                }
+            }
+
+            public void Dispose()
+            {
+                if (tomado)
+                {
+                    tomado = false;
+                    candadoDatos.ReleaseMutex();
+                }
+            }
+        }
+
+        // Uso: using (ArchivoHelper.BloquearDatos()) { ... }
+        public static IDisposable BloquearDatos()
+        {
+            return new Candado();
+        }
+
+        // Identifica la versión de un archivo (fecha de cambio + tamaño).
+        // Si cambia, otra instancia lo modificó.
+        private static string Firma(string ruta)
+        {
+            if (!File.Exists(ruta))
+                return string.Empty;
+
+            FileInfo info = new FileInfo(ruta);
+
+            return info.LastWriteTimeUtc.Ticks + "-" + info.Length;
+        }
+
+        public static string FirmaArchivoProductos()
+        {
+            return Firma(ArchivoProductos);
+        }
+
+        public static string FirmaArchivoVentas()
+        {
+            return Firma(ArchivoVentas);
+        }
+
+        // Lee un archivo que otra instancia podría estar escribiendo.
+        private static string[] LeerLineasSeguro(string ruta)
+        {
+            for (int intento = 0; ; intento++)
+            {
+                try
+                {
+                    return File.ReadAllLines(ruta);
+                }
+                catch (IOException) when (intento < 5)
+                {
+                    Thread.Sleep(50);
+                }
+            }
+        }
+
+        // Escribe en un archivo temporal y lo reemplaza de una sola vez,
+        // para que otra instancia nunca lea un archivo a medio escribir.
+        private static void EscribirLineasSeguro(
+            string ruta,
+            IEnumerable<string> lineas)
+        {
+            string temporal = ruta + ".tmp";
+
+            File.WriteAllLines(temporal, lineas);
+
+            for (int intento = 0; ; intento++)
+            {
+                try
+                {
+                    File.Move(temporal, ruta, true);
+                    return;
+                }
+                catch (IOException) when (intento < 5)
+                {
+                    Thread.Sleep(50);
+                }
+            }
+        }
+
+        // =========================================================
         // PRODUCTOS
         // =========================================================
 
@@ -40,14 +145,9 @@ namespace FediCasa.Helpers
         {
             InicializarCarpetaData();
 
-            using StreamWriter escritor = new StreamWriter(
+            EscribirLineasSeguro(
                 ArchivoProductos,
-                false);
-
-            foreach (Producto producto in productos)
-            {
-                escritor.WriteLine(producto.ToString());
-            }
+                productos.Select(p => p.ToString()));
         }
 
         public static List<Producto> LeerProductos()
@@ -59,7 +159,7 @@ namespace FediCasa.Helpers
             if (!File.Exists(ArchivoProductos))
                 return productos;
 
-            foreach (string linea in File.ReadAllLines(ArchivoProductos))
+            foreach (string linea in LeerLineasSeguro(ArchivoProductos))
             {
                 // DesdeTexto conserva stock mínimo, unidad y fechas.
                 Producto producto = Producto.DesdeTexto(linea);
@@ -99,14 +199,9 @@ namespace FediCasa.Helpers
         {
             InicializarCarpetaData();
 
-            using StreamWriter escritor = new StreamWriter(
+            EscribirLineasSeguro(
                 ArchivoVentas,
-                false);
-
-            foreach (Venta venta in ventas)
-            {
-                escritor.WriteLine(venta.ToString());
-            }
+                ventas.Select(v => v.ToString()));
         }
 
         public static List<Venta> LeerVentas()
@@ -118,7 +213,7 @@ namespace FediCasa.Helpers
             if (!File.Exists(ArchivoVentas))
                 return ventas;
 
-            foreach (string linea in File.ReadAllLines(ArchivoVentas))
+            foreach (string linea in LeerLineasSeguro(ArchivoVentas))
             {
                 // DesdeTexto conserva estado, cliente, vendedor, etc.
                 Venta venta = Venta.DesdeTexto(linea);

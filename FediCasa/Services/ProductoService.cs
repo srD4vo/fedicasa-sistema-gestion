@@ -13,6 +13,9 @@ namespace FediCasa.Services
 
         private static bool inicializado = false;
 
+        // Versión de productos.txt que tenemos en memoria.
+        private static string firmaProductos = string.Empty;
+
         // =========================================================
         // INICIALIZACIÓN
         // =========================================================
@@ -20,7 +23,22 @@ namespace FediCasa.Services
         public static void Inicializar()
         {
             if (inicializado)
+            {
+                // Si otra instancia cambió productos.txt, se vuelve a leer.
+                string firma = ArchivoHelper.FirmaArchivoProductos();
+
+                if (firma != firmaProductos &&
+                    ArchivoHelper.ExisteArchivoProductos())
+                {
+                    productos.Clear();
+                    productos.AddRange(
+                        ArchivoHelper.LeerProductos());
+
+                    firmaProductos = firma;
+                }
+
                 return;
+            }
 
             productos.Clear();
 
@@ -40,6 +58,7 @@ namespace FediCasa.Services
             }
 
             inicializado = true;
+            firmaProductos = ArchivoHelper.FirmaArchivoProductos();
         }
 
         // =========================================================
@@ -205,26 +224,6 @@ namespace FediCasa.Services
 
             Producto producto =
                 productos.FirstOrDefault(p =>
-                    p.Codigo.Equals(
-                        codigo.Trim(),
-                        StringComparison.OrdinalIgnoreCase));
-
-            return producto == null
-                ? null
-                : CopiarProducto(producto);
-        }
-
-        public static Producto BuscarActivoPorCodigo(
-            string codigo)
-        {
-            Inicializar();
-
-            if (string.IsNullOrWhiteSpace(codigo))
-                return null;
-
-            Producto producto =
-                productos.FirstOrDefault(p =>
-                    p.Activo &&
                     p.Codigo.Equals(
                         codigo.Trim(),
                         StringComparison.OrdinalIgnoreCase));
@@ -884,6 +883,17 @@ namespace FediCasa.Services
                 2);
         }
 
+        // Solo devuelve el producto si está activo (para ventas).
+        public static Producto BuscarActivoPorCodigo(
+            string codigo)
+        {
+            Producto producto = BuscarPorCodigo(codigo);
+
+            return producto != null && producto.Activo
+                ? producto
+                : null;
+        }
+
         // =========================================================
         // PERSISTENCIA
         // =========================================================
@@ -894,6 +904,8 @@ namespace FediCasa.Services
 
             ArchivoHelper.GuardarProductos(
                 productos);
+
+            firmaProductos = ArchivoHelper.FirmaArchivoProductos();
         }
 
         // =========================================================

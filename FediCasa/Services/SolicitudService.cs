@@ -108,6 +108,18 @@ namespace FediCasa.Services
             string comentario,
             out string mensaje)
         {
+            // El candado evita aprobar dos veces desde dos instancias.
+            using (ArchivoHelper.BloquearDatos())
+            {
+                return AprobarInterno(id, comentario, out mensaje);
+            }
+        }
+
+        private static bool AprobarInterno(
+            int id,
+            string comentario,
+            out string mensaje)
+        {
             mensaje = string.Empty;
 
             if (!SesionService.PuedeAutorizarSolicitudes())
@@ -287,6 +299,22 @@ namespace FediCasa.Services
         // ---------------------------------------------------------
 
         public static bool EjecutarOperacion(
+            string tipo,
+            string codigo,
+            int cantidad,
+            string motivo,
+            string solicitante,
+            out string mensaje)
+        {
+            using (ArchivoHelper.BloquearDatos())
+            {
+                return EjecutarOperacionInterno(
+                    tipo, codigo, cantidad, motivo,
+                    solicitante, out mensaje);
+            }
+        }
+
+        private static bool EjecutarOperacionInterno(
             string tipo,
             string codigo,
             int cantidad,
