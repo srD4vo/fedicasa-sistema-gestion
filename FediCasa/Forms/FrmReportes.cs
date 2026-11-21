@@ -178,7 +178,7 @@ namespace FediCasa.Forms
             rtbReporte.Size = new Size(1020, 460);
 
             lblInformacion.Text =
-                "Genera el resumen de tus operaciones de hoy (turno).";
+                "Genera el resumen de tu turno (desde que iniciaste sesión).";
         }
 
         private void GenerarReporteDeTurno()
@@ -199,12 +199,29 @@ namespace FediCasa.Forms
 
             try
             {
-                string ruta =
-                    ReporteHelper.GenerarReporteTurno(
-                        empleado,
-                        VentaService.ObtenerVentas(),
-                        SolicitudService.Obtener(),
-                        MovimientoService.Obtener());
+                string ruta;
+
+                if (SesionService.EsInventario())
+                {
+                    // Inventario: reporte propio del turno.
+                    ruta =
+                        ReporteHelper.GenerarReporteInventario(
+                            empleado,
+                            SesionService.InicioTurno,
+                            ProductoService.ObtenerProductos(),
+                            SolicitudService.Obtener(),
+                            MovimientoService.Obtener());
+                }
+                else
+                {
+                    // Ventas: reporte sin cambios.
+                    ruta =
+                        ReporteHelper.GenerarReporteTurno(
+                            empleado,
+                            VentaService.ObtenerVentas(),
+                            SolicitudService.Obtener(),
+                            MovimientoService.Obtener());
+                }
 
                 rtbReporte.Text =
                     ReporteHelper.LeerReporte(
@@ -308,11 +325,29 @@ namespace FediCasa.Forms
                     return;
                 }
 
-                string ruta =
-                    ReporteHelper.GenerarReporteCompleto(
-                        ventas,
-                        productos,
-                        empleado);
+                string ruta;
+
+                if (SesionService.EsUsuarioMaestro())
+                {
+                    ruta =
+                        ReporteHelper.GenerarReporteMaestro(
+                            empleado,
+                            SesionService.InicioTurno,
+                            SolicitudService.Obtener(),
+                            MovimientoService.Obtener(),
+                            ActividadService.ObtenerDelTurno());
+                }
+                else
+                {
+                    ruta =
+                        ReporteHelper.GenerarReporteAdministrador(
+                            empleado,
+                            SesionService.InicioTurno,
+                            ventas,
+                            productos,
+                            SolicitudService.Obtener(),
+                            ActividadService.ObtenerDelTurno());
+                }
 
                 MessageBox.Show(
                     "Reporte generado correctamente.\n\n" +

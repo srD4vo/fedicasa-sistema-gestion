@@ -481,6 +481,10 @@ namespace FediCasa.Forms
             ArchivoHelper.GuardarEmpleados(
                 empleados);
 
+            ActividadService.Registrar(
+                "Usuario registrado",
+                nuevoEmpleado.Usuario + " (" + nuevoEmpleado.Cargo + ")");
+
             MessageBox.Show(
                 "El usuario fue registrado correctamente.",
                 "Registro exitoso",
@@ -626,6 +630,12 @@ namespace FediCasa.Forms
                 }
             }
 
+            string antes =
+                empleado.Usuario + " (" + empleado.Cargo + ")";
+
+            bool cambioClave =
+                empleado.Contraseña != txtContraseña.Text;
+
             empleado.Usuario =
                 nuevoUsuario;
 
@@ -643,6 +653,13 @@ namespace FediCasa.Forms
 
             ArchivoHelper.GuardarEmpleados(
                 empleados);
+
+            ActividadService.Registrar(
+                cambioClave
+                    ? "Usuario modificado (contraseña restablecida)"
+                    : "Usuario modificado",
+                antes + " -> " + nuevoUsuario +
+                " (" + cmbCargo.Text + ")");
 
             MessageBox.Show(
                 "El usuario fue modificado correctamente.",
@@ -764,6 +781,10 @@ namespace FediCasa.Forms
 
             ArchivoHelper.GuardarEmpleados(
                 empleados);
+
+            ActividadService.Registrar(
+                "Usuario eliminado",
+                empleado.Usuario + " (" + empleado.Cargo + ")");
 
             MessageBox.Show(
                 "El usuario fue eliminado correctamente.",

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FediCasa.Helpers;
@@ -403,6 +403,10 @@ namespace FediCasa.Services
 
             Guardar();
 
+            ActividadService.Registrar(
+                "Producto registrado",
+                producto.Codigo + " - " + producto.Nombre);
+
             return true;
         }
 
@@ -560,6 +564,10 @@ namespace FediCasa.Services
 
             Guardar();
 
+            ActividadService.Registrar(
+                "Producto modificado",
+                producto.Codigo + " - " + producto.Nombre);
+
             return true;
         }
 
@@ -601,6 +609,10 @@ namespace FediCasa.Services
 
             Guardar();
 
+            ActividadService.Registrar(
+                "Producto desactivado",
+                producto.Codigo + " - " + producto.Nombre);
+
             return true;
         }
 
@@ -641,6 +653,10 @@ namespace FediCasa.Services
             producto.Activar();
 
             Guardar();
+
+            ActividadService.Registrar(
+                "Producto reactivado",
+                producto.Codigo + " - " + producto.Nombre);
 
             return true;
         }

@@ -165,11 +165,24 @@ namespace FediCasa.Services
 
             ArchivoHelper.GuardarSolicitudes(todas);
 
+            ActividadService.Registrar(
+                "Solicitud aprobada",
+                DescribirSolicitud(s));
+
             mensaje = s.EsOperacionDeStock()
                 ? "Solicitud aprobada y stock actualizado."
                 : "Solicitud aprobada. Aplique el cambio en Productos.";
 
             return true;
+        }
+
+        private static string DescribirSolicitud(Solicitud s)
+        {
+            return "N.° " + s.Id + " - " + s.Tipo +
+                   (s.CodigoProducto != string.Empty
+                       ? " (" + s.CodigoProducto + ")"
+                       : "") +
+                   " de " + s.Solicitante;
         }
 
         // ---------------------------------------------------------
@@ -257,6 +270,10 @@ namespace FediCasa.Services
             s.Comentario = comentario.Trim();
 
             ArchivoHelper.GuardarSolicitudes(todas);
+
+            ActividadService.Registrar(
+                "Solicitud " + nuevoEstado.ToLower(),
+                DescribirSolicitud(s));
 
             mensaje = "Solicitud actualizada: " + nuevoEstado + ".";
             return true;

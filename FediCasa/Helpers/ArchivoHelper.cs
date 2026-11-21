@@ -187,6 +187,42 @@ namespace FediCasa.Helpers
         }
 
         // =========================================================
+        // ACTIVIDAD ADMINISTRATIVA (para reportes de turno)
+        // =========================================================
+
+        private static readonly string ArchivoActividad =
+            Path.Combine(CarpetaData, "actividad.txt");
+
+        public static void GuardarActividad(Actividad actividad)
+        {
+            InicializarCarpetaData();
+
+            File.AppendAllText(
+                ArchivoActividad,
+                actividad.ToString() + Environment.NewLine);
+        }
+
+        public static List<Actividad> LeerActividades()
+        {
+            InicializarCarpetaData();
+
+            List<Actividad> lista = new List<Actividad>();
+
+            if (!File.Exists(ArchivoActividad))
+                return lista;
+
+            foreach (string linea in File.ReadAllLines(ArchivoActividad))
+            {
+                Actividad a = Actividad.DesdeTexto(linea);
+
+                if (a != null)
+                    lista.Add(a);
+            }
+
+            return lista;
+        }
+
+        // =========================================================
         // SOLICITUDES E INCIDENCIAS
         // =========================================================
 

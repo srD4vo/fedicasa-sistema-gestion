@@ -837,5 +837,512 @@ namespace FediCasa.Helpers
 
             return Path.Combine(CarpetaReportes, archivo);
         }
+
+        // ─────────────────────────────────────────────
+        // REPORTES POR ROL (Administrador, Inventario, admin)
+        // Cada uno incluye solo lo ocurrido desde el inicio
+        // de sesión del usuario (inicioTurno).
+        // ─────────────────────────────────────────────
+
+        private const string RucEmpresa = "10458963271";
+        private const string DireccionEmpresa =
+            "Av. Las Palmeras 5201, Los Olivos 15304";
+        private const string CelularEmpresa = "998 186 179";
+        private const int AnchoReporte = 60;
+
+        private static string Centrar(string texto)
+        {
+            if (texto.Length >= AnchoReporte)
+                return texto;
+
+            return new string(' ', (AnchoReporte - texto.Length) / 2) + texto;
+        }
+
+        private static string Recortar(string texto, int largo)
+        {
+            if (texto == null)
+                texto = string.Empty;
+
+            return texto.Length <= largo
+                ? texto.PadRight(largo)
+                : texto.Substring(0, largo - 1) + ".";
+        }
+
+        private static void EncabezadoRol(
+            StringBuilder sb,
+            string titulo,
+            Empleado empleado,
+            string cargo,
+            DateTime inicioTurno,
+            DateTime ahora)
+        {
+            string doble = new string('=', AnchoReporte);
+
+            sb.AppendLine(doble);
+            sb.AppendLine(Centrar("FEDICASA"));
+            sb.AppendLine(Centrar(titulo));
+            sb.AppendLine(doble);
+            sb.AppendLine();
+            sb.AppendLine("RUC       : " + RucEmpresa);
+            sb.AppendLine("Dirección : " + DireccionEmpresa);
+            sb.AppendLine("Celular   : " + CelularEmpresa);
+            sb.AppendLine();
+            sb.AppendLine("Fecha de generación: " +
+                          ahora.ToString("dd/MM/yyyy HH:mm:ss"));
+            sb.AppendLine("Generado por       : " + empleado.NombreCompleto);
+            sb.AppendLine("Usuario            : " + empleado.Usuario);
+            sb.AppendLine("Cargo              : " + cargo);
+            sb.AppendLine("Inicio del turno   : " +
+                          inicioTurno.ToString("dd/MM/yyyy HH:mm:ss"));
+        }
+
+        private static void Bloque(StringBuilder sb, string titulo)
+        {
+            string doble = new string('=', AnchoReporte);
+
+            sb.AppendLine();
+            sb.AppendLine(doble);
+            sb.AppendLine(Centrar(titulo));
+            sb.AppendLine(doble);
+            sb.AppendLine();
+        }
+
+        private static void Subtitulo(StringBuilder sb, string titulo)
+        {
+            sb.AppendLine();
+            sb.AppendLine("---------------- " + titulo + " ----------------");
+        }
+
+        private static void Pie(StringBuilder sb)
+        {
+            sb.AppendLine();
+            sb.AppendLine(new string('=', AnchoReporte));
+            sb.AppendLine(Centrar("FIN DEL REPORTE"));
+            sb.AppendLine(new string('=', AnchoReporte));
+        }
+
+        private static string GuardarReporteRol(
+            string rol,
+            Empleado empleado,
+            DateTime ahora,
+            StringBuilder sb)
+        {
+            InicializarCarpetaReportes();
+
+            string nombre =
+                "Reporte_" + ahora.ToString("yyyy-MM-dd_HH-mm-ss") +
+                "_" + rol + "_" + empleado.Usuario + ".txt";
+
+            string ruta = Path.Combine(CarpetaReportes, nombre);
+
+            File.WriteAllText(ruta, sb.ToString(), Encoding.UTF8);
+
+            return ruta;
+        }
+
+        private static DateTime FechaDeVenta(Venta v)
+        {
+            return v.Estado == "Confirmada" && v.FechaConfirmacion.Year > 2000
+                ? v.FechaConfirmacion
+                : v.Fecha;
+        }
+
+        // Productos con stock igual o menor al mínimo (stock actual).
+        private static void ListaBajoStock(
+            StringBuilder sb,
+            List<Producto> productos)
+        {
+            var bajos = productos
+                .Where(p => p.EstaEnStockBajo())
+                .OrderBy(p => p.Stock)
+                .ToList();
+
+            if (bajos.Count == 0)
+            {
+                sb.AppendLine("No existen productos con bajo stock.");
+                return;
+            }
+
+            foreach (Producto p in bajos)
+            {
+                sb.AppendLine(
+                    p.Codigo + " - " + p.Nombre +
+                    " | Stock: " + p.Stock +
+                    " | Mínimo: " + p.StockMinimo +
+                    (p.Stock <= 0 ? " | AGOTADO" : ""));
+            }
+        }
+
+        private static void ResumenInventario(
+            StringBuilder sb,
+            List<Producto> productos)
+        {
+            var activos = productos.Where(p => p.Activo).ToList();
+
+            sb.AppendLine("Productos activos   : " + activos.Count);
+            sb.AppendLine("Productos inactivos : " +
+                          (productos.Count - activos.Count));
+            sb.AppendLine("Unidades en stock   : " +
+                          activos.Sum(p => p.Stock));
+            sb.AppendLine("Valor del inventario: S/ " +
+                          activos.Sum(p => p.Precio * p.Stock).ToString("0.00"));
+            sb.AppendLine("Con bajo stock      : " +
+                          activos.Count(p => p.EstaEnStockBajo()));
+            sb.AppendLine("Agotados            : " +
+                          activos.Count(p => p.Stock <= 0));
+        }
+
+        private static void ListaActividades(
+            StringBuilder sb,
+            List<Actividad> lista,
+            string mensajeVacio)
+        {
+            if (lista.Count == 0)
+            {
+                sb.AppendLine(mensajeVacio);
+                return;
+            }
+
+            foreach (Actividad a in lista)
+            {
+                sb.AppendLine(
+                    a.Fecha.ToString("HH:mm:ss") + " | " +
+                    a.Accion + " | " + a.Detalle);
+            }
+        }
+
+        // ----------------------- ADMINISTRADOR -----------------------
+
+        public static string GenerarReporteAdministrador(
+            Empleado empleado,
+            DateTime inicioTurno,
+            List<Venta> ventas,
+            List<Producto> productos,
+            List<Solicitud> solicitudes,
+            List<Actividad> actividades)
+        {
+            DateTime ahora = DateTime.Now;
+            StringBuilder sb = new StringBuilder();
+
+            EncabezadoRol(sb, "REPORTE DEL SISTEMA", empleado,
+                          "Administrador", inicioTurno, ahora);
+
+            // Ventas confirmadas durante el turno.
+            var ventasTurno = ventas
+                .Where(v => v.Estado == "Confirmada" &&
+                            FechaDeVenta(v) >= inicioTurno)
+                .ToList();
+
+            Bloque(sb, "RESUMEN DE VENTAS");
+
+            sb.AppendLine("(Ventas confirmadas desde el inicio del turno)");
+            sb.AppendLine();
+            sb.AppendLine("Registros de venta : " +
+                          ventasTurno.Select(v => v.IdVenta).Distinct().Count());
+            sb.AppendLine("Unidades vendidas  : " +
+                          ventasTurno.Sum(v => v.Cantidad));
+            sb.AppendLine("Total vendido      : S/ " +
+                          ventasTurno.Sum(v => v.Total).ToString("0.00"));
+
+            Subtitulo(sb, "PRODUCTO MÁS VENDIDO");
+
+            var porProducto = ventasTurno
+                .GroupBy(v => v.CodigoProducto)
+                .Select(g => new
+                {
+                    Codigo = g.Key,
+                    Nombre = g.First().NombreProducto,
+                    Unidades = g.Sum(v => v.Cantidad),
+                    Ingresos = g.Sum(v => v.Total)
+                })
+                .ToList();
+
+            if (porProducto.Count == 0)
+            {
+                sb.AppendLine("Sin ventas confirmadas en el turno.");
+            }
+            else
+            {
+                var top = porProducto.OrderByDescending(p => p.Unidades).First();
+                sb.AppendLine(top.Codigo + " - " + top.Nombre +
+                              " | " + top.Unidades + " unidades");
+            }
+
+            Subtitulo(sb, "TOP 3 POR INGRESOS");
+
+            if (porProducto.Count == 0)
+            {
+                sb.AppendLine("Sin ventas confirmadas en el turno.");
+            }
+            else
+            {
+                int puesto = 1;
+
+                foreach (var p in porProducto
+                    .OrderByDescending(x => x.Ingresos).Take(3))
+                {
+                    sb.AppendLine(puesto + ". " + p.Codigo + " - " + p.Nombre +
+                                  " | S/ " + p.Ingresos.ToString("0.00"));
+                    puesto++;
+                }
+            }
+
+            Subtitulo(sb, "PRODUCTOS CON BAJO STOCK");
+            ListaBajoStock(sb, productos);
+
+            Bloque(sb, "INVENTARIO ACTUAL");
+            ResumenInventario(sb, productos);
+
+            // Solicitudes pendientes de revisión (estado actual).
+            Bloque(sb, "SOLICITUDES E INCIDENCIAS");
+
+            var pendientes = solicitudes
+                .Where(s => s.Estado == Solicitud.Pendiente)
+                .OrderBy(s => s.Fecha)
+                .ToList();
+
+            sb.AppendLine("Pendientes de revisión : " + pendientes.Count);
+            sb.AppendLine("Derivadas a admin      : " +
+                          solicitudes.Count(s => s.Estado == Solicitud.Derivada));
+            sb.AppendLine();
+
+            foreach (Solicitud s in pendientes.Take(10))
+            {
+                sb.AppendLine(
+                    "N.° " + s.Id + " | " + s.Tipo + " | " +
+                    s.Fecha.ToString("dd/MM HH:mm") + " | " + s.Solicitante);
+            }
+
+            if (pendientes.Count > 10)
+                sb.AppendLine("... y " + (pendientes.Count - 10) + " más.");
+
+            // Lo que hizo el administrador durante su sesión.
+            Bloque(sb, "ACTIVIDAD ADMINISTRATIVA DEL TURNO");
+
+            Subtitulo(sb, "CAMBIOS EN PRODUCTOS");
+            ListaActividades(
+                sb,
+                actividades.Where(a => a.Accion.StartsWith("Producto")).ToList(),
+                "No realizó cambios en productos durante el turno.");
+
+            Subtitulo(sb, "SOLICITUDES REVISADAS");
+            ListaActividades(
+                sb,
+                actividades.Where(a => a.Accion.StartsWith("Solicitud")).ToList(),
+                "No revisó solicitudes durante el turno.");
+
+            Pie(sb);
+
+            return GuardarReporteRol("Administrador", empleado, ahora, sb);
+        }
+
+        // ------------------------ INVENTARIO ------------------------
+
+        public static string GenerarReporteInventario(
+            Empleado empleado,
+            DateTime inicioTurno,
+            List<Producto> productos,
+            List<Solicitud> solicitudes,
+            List<Movimiento> movimientos)
+        {
+            DateTime ahora = DateTime.Now;
+            string usuario = empleado.Usuario;
+            StringBuilder sb = new StringBuilder();
+
+            EncabezadoRol(sb, "REPORTE DE INVENTARIO", empleado,
+                          "Inventario", inicioTurno, ahora);
+
+            Bloque(sb, "RESUMEN DEL INVENTARIO ACTUAL");
+            ResumenInventario(sb, productos);
+
+            Subtitulo(sb, "PRODUCTOS CON BAJO STOCK");
+            ListaBajoStock(sb, productos);
+
+            Bloque(sb, "LISTADO DE PRODUCTOS (STOCK ACTUAL)");
+
+            sb.AppendLine(
+                Recortar("CÓDIGO", 12) + Recortar("PRODUCTO", 28) +
+                Recortar("UNIDAD", 10) + "STOCK");
+            sb.AppendLine(new string('-', AnchoReporte));
+
+            foreach (Producto p in productos.OrderBy(x => x.Nombre))
+            {
+                sb.AppendLine(
+                    Recortar(p.Codigo, 12) + Recortar(p.Nombre, 28) +
+                    Recortar(p.UnidadMedida, 10) +
+                    p.Stock.ToString().PadLeft(5) +
+                    (p.Activo ? "" : "  (inactivo)"));
+            }
+
+            // Operaciones de stock aplicadas durante el turno.
+            Bloque(sb, "OPERACIONES DE INVENTARIO DEL TURNO");
+
+            var ops = movimientos
+                .Where(m => m.Fecha >= inicioTurno &&
+                            (m.Tipo == "Ingreso" ||
+                             m.Tipo == "Salida" ||
+                             m.Tipo == "Diferencia") &&
+                            (m.Usuario.Equals(
+                                 usuario,
+                                 StringComparison.OrdinalIgnoreCase) ||
+                             m.Detalle.Contains(
+                                 "solicitado por: " + usuario + ")")))
+                .OrderBy(m => m.Fecha)
+                .ToList();
+
+            if (ops.Count == 0)
+                sb.AppendLine("Sin operaciones de stock en este turno.");
+
+            foreach (Movimiento m in ops)
+            {
+                sb.AppendLine(
+                    m.Fecha.ToString("HH:mm:ss") + " | " + m.Tipo +
+                    " | " + m.CodigoProducto + " " + m.NombreProducto +
+                    " | Cant.: " + m.Cantidad.ToString("+0;-0;0") +
+                    " | Stock: " + m.StockResultante);
+                sb.AppendLine("      " + m.Detalle);
+            }
+
+            if (ops.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("Ingresos    : " + ops.Count(m => m.Tipo == "Ingreso") +
+                              " (" + ops.Where(m => m.Tipo == "Ingreso")
+                                        .Sum(m => m.Cantidad) + " unid.)");
+                sb.AppendLine("Salidas     : " + ops.Count(m => m.Tipo == "Salida") +
+                              " (" + ops.Where(m => m.Tipo == "Salida")
+                                        .Sum(m => -m.Cantidad) + " unid.)");
+                sb.AppendLine("Diferencias : " + ops.Count(m => m.Tipo == "Diferencia"));
+            }
+
+            // Solicitudes creadas en el turno y su estado actual.
+            Bloque(sb, "SOLICITUDES E INCIDENCIAS DEL TURNO");
+
+            var misSolicitudes = solicitudes
+                .Where(s => s.Solicitante.Equals(
+                                usuario,
+                                StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var delTurno = misSolicitudes
+                .Where(s => s.Fecha >= inicioTurno)
+                .OrderBy(s => s.Fecha)
+                .ToList();
+
+            if (delTurno.Count == 0)
+                sb.AppendLine("Sin solicitudes ni incidencias en este turno.");
+
+            foreach (Solicitud s in delTurno)
+            {
+                sb.AppendLine(
+                    s.Fecha.ToString("HH:mm:ss") +
+                    " | N.° " + s.Id + " | " + s.Tipo + " | " + s.Estado +
+                    (s.CodigoProducto != string.Empty
+                        ? " | Prod.: " + s.CodigoProducto + " x " + s.Cantidad
+                        : ""));
+                sb.AppendLine("      Motivo: " + s.Motivo);
+
+                if (s.Comentario != string.Empty)
+                    sb.AppendLine("      Revisión (" + s.Revisor + "): " +
+                                  s.Comentario);
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Solicitudes anteriores aún pendientes: " +
+                          misSolicitudes.Count(s => s.Fecha < inicioTurno &&
+                                                    s.Estado == Solicitud.Pendiente));
+
+            Pie(sb);
+
+            return GuardarReporteRol("Inventario", empleado, ahora, sb);
+        }
+
+        // ------------------- USUARIO MAESTRO (admin) -------------------
+
+        public static string GenerarReporteMaestro(
+            Empleado empleado,
+            DateTime inicioTurno,
+            List<Solicitud> solicitudes,
+            List<Movimiento> movimientos,
+            List<Actividad> actividades)
+        {
+            DateTime ahora = DateTime.Now;
+            string usuario = empleado.Usuario;
+            StringBuilder sb = new StringBuilder();
+
+            EncabezadoRol(sb, "REPORTE DEL USUARIO MAESTRO", empleado,
+                          "Usuario maestro", inicioTurno, ahora);
+
+            Bloque(sb, "ACCIONES ADMINISTRATIVAS Y TÉCNICAS");
+
+            Subtitulo(sb, "USUARIOS");
+            ListaActividades(
+                sb,
+                actividades.Where(a => a.Accion.StartsWith("Usuario")).ToList(),
+                "No realizó acciones sobre usuarios durante el turno.");
+
+            Subtitulo(sb, "PRODUCTOS");
+            ListaActividades(
+                sb,
+                actividades.Where(a => a.Accion.StartsWith("Producto")).ToList(),
+                "No realizó cambios en productos durante el turno.");
+
+            Subtitulo(sb, "SOLICITUDES E INCIDENCIAS ATENDIDAS");
+            ListaActividades(
+                sb,
+                actividades.Where(a => a.Accion.StartsWith("Solicitud")).ToList(),
+                "No atendió solicitudes ni incidencias durante el turno.");
+
+            Bloque(sb, "OPERACIONES REGISTRADAS DURANTE EL TURNO");
+
+            var ops = movimientos
+                .Where(m => m.Fecha >= inicioTurno &&
+                            m.Usuario.Equals(
+                                usuario,
+                                StringComparison.OrdinalIgnoreCase))
+                .OrderBy(m => m.Fecha)
+                .ToList();
+
+            if (ops.Count == 0)
+                sb.AppendLine("Sin operaciones de inventario ni de ventas en este turno.");
+
+            foreach (Movimiento m in ops)
+            {
+                sb.AppendLine(
+                    m.Fecha.ToString("HH:mm:ss") + " | " + m.Tipo +
+                    " | " + m.CodigoProducto + " " + m.NombreProducto +
+                    " | Cant.: " + m.Cantidad.ToString("+0;-0;0") +
+                    " | " + m.Detalle);
+            }
+
+            Bloque(sb, "INCIDENCIAS DERIVADAS PENDIENTES");
+
+            var derivadas = solicitudes
+                .Where(s => s.Estado == Solicitud.Derivada)
+                .OrderBy(s => s.Fecha)
+                .ToList();
+
+            if (derivadas.Count == 0)
+                sb.AppendLine("No hay incidencias derivadas pendientes.");
+
+            foreach (Solicitud s in derivadas)
+            {
+                sb.AppendLine(
+                    "N.° " + s.Id + " | " + s.Fecha.ToString("dd/MM HH:mm") +
+                    " | de " + s.Solicitante);
+                sb.AppendLine("      " + s.Motivo);
+            }
+
+            Bloque(sb, "RESUMEN DEL TURNO");
+            sb.AppendLine("Acciones administrativas : " + actividades.Count);
+            sb.AppendLine("Operaciones registradas  : " + ops.Count);
+
+            if (actividades.Count == 0 && ops.Count == 0)
+                sb.AppendLine("No realizó ninguna acción durante este turno.");
+
+            Pie(sb);
+
+            return GuardarReporteRol("Maestro", empleado, ahora, sb);
+        }
     }
 }

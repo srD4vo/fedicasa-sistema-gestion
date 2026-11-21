@@ -13,6 +13,9 @@ namespace FediCasa.Services
 
         public static Empleado EmpleadoActual { get; private set; }
 
+        // Momento en que el usuario actual inició sesión (inicio de su turno).
+        public static DateTime InicioTurno { get; private set; }
+
         public static bool SesionActiva
         {
             get
@@ -63,6 +66,7 @@ namespace FediCasa.Services
             }
 
             EmpleadoActual = empleado;
+            InicioTurno = DateTime.Now;
 
             return true;
         }
@@ -74,6 +78,7 @@ namespace FediCasa.Services
         public static void CerrarSesion()
         {
             EmpleadoActual = null;
+            InicioTurno = DateTime.MinValue;
         }
 
         // =========================================================
