@@ -114,7 +114,22 @@ namespace FediCasa.Forms
             dgv.Columns.Add("Comentario", "Comentario");
             dgv.Columns["Id"].FillWeight = 30;
             dgv.Columns["Cantidad"].FillWeight = 35;
+            dgv.Columns["Motivo"].FillWeight = 140;
+            dgv.Columns["Comentario"].FillWeight = 120;
+            dgv.RowTemplate.Height = 28;
+            dgv.ColumnHeadersDefaultCellStyle.Font =
+                new Font("Segoe UI", 10F, FontStyle.Bold);
+            dgv.CellDoubleClick += Dgv_CellDoubleClick;
             Controls.Add(dgv);
+
+            Controls.Add(new Label
+            {
+                Text = "Doble clic en una fila para ver el detalle completo.",
+                AutoSize = true,
+                ForeColor = Color.DimGray,
+                Font = new Font("Segoe UI", 9F),
+                Location = new Point(320, 74)
+            });
 
             if (SesionService.PuedeCrearSolicitud())
                 ConstruirNuevaSolicitud();
@@ -380,7 +395,7 @@ namespace FediCasa.Forms
             foreach (Solicitud s in SolicitudService.Obtener()
                 .Where(x => filtro == "Todos" || x.Estado == filtro))
             {
-                dgv.Rows.Add(
+                int fila = dgv.Rows.Add(
                     s.Id,
                     s.Fecha.ToString("dd/MM/yyyy HH:mm"),
                     s.Tipo,
@@ -391,7 +406,168 @@ namespace FediCasa.Forms
                     s.Revisor,
                     s.Motivo,
                     s.Comentario);
+
+                DataGridViewRow row = dgv.Rows[fila];
+                row.Cells["Estado"].Style.ForeColor = ColorEstado(s.Estado);
+                row.Cells["Estado"].Style.Font =
+                    new Font("Segoe UI", 10F, FontStyle.Bold);
+                row.Cells["Motivo"].ToolTipText = s.Motivo;
+                row.Cells["Comentario"].ToolTipText = s.Comentario;
             }
+        }
+
+        private Color ColorEstado(string estado)
+        {
+            switch (estado)
+            {
+                case Solicitud.Aprobada:
+                case Solicitud.Resuelta:
+                    return Color.FromArgb(30, 120, 60);
+                case Solicitud.Rechazada:
+                    return Color.Firebrick;
+                case Solicitud.Derivada:
+                    return Color.FromArgb(110, 60, 160);
+                default:
+                    return Color.DarkOrange;
+            }
+        }
+
+        // ---------------------------------------------------------
+        // DETALLE (doble clic en una fila)
+        // ---------------------------------------------------------
+
+        private void Dgv_CellDoubleClick(
+            object sender,
+            DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0)
+                return;
+
+            int id = Convert.ToInt32(dgv.Rows[e.RowIndex].Cells["Id"].Value);
+
+            Solicitud solicitud = SolicitudService.Obtener()
+                .FirstOrDefault(x => x.Id == id);
+
+            if (solicitud != null)
+                MostrarDetalle(solicitud);
+        }
+
+        private void MostrarDetalle(Solicitud s)
+        {
+            Producto producto = string.IsNullOrWhiteSpace(s.CodigoProducto)
+                ? null
+                : ProductoService.BuscarPorCodigo(s.CodigoProducto);
+
+            string textoProducto =
+                producto != null
+                    ? producto.Nombre + " (" + producto.Codigo + ")"
+                    : (s.CodigoProducto == string.Empty
+                        ? "No aplica"
+                        : s.CodigoProducto);
+
+            using (Form f = new Form())
+            {
+                f.Text = "Detalle de solicitud N.° " + s.Id;
+                f.StartPosition = FormStartPosition.CenterParent;
+                f.FormBorderStyle = FormBorderStyle.FixedDialog;
+                f.MaximizeBox = false;
+                f.MinimizeBox = false;
+                f.ClientSize = new Size(640, 640);
+                f.BackColor = Color.White;
+                f.Font = new Font("Segoe UI", 10F);
+
+                f.Controls.Add(new Label
+                {
+                    Text = s.Tipo + " N.° " + s.Id,
+                    Font = new Font("Segoe UI", 16F, FontStyle.Bold),
+                    AutoSize = true,
+                    Location = new Point(20, 15)
+                });
+
+                f.Controls.Add(new Label
+                {
+                    Text = s.Estado,
+                    Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+                    ForeColor = ColorEstado(s.Estado),
+                    AutoSize = true,
+                    Location = new Point(22, 50)
+                });
+
+                // Datos en dos columnas
+                AgregarDato(f, "Fecha", s.Fecha.ToString("dd/MM/yyyy HH:mm"), 20, 90);
+                AgregarDato(f, "Cantidad", s.Cantidad.ToString(), 330, 90);
+                AgregarDato(f, "Producto", textoProducto, 20, 140);
+                AgregarDato(f, "Solicitante", s.Solicitante, 20, 190);
+                AgregarDato(f, "Revisor",
+                    s.Revisor == string.Empty ? "Sin revisar" : s.Revisor,
+                    330, 190);
+
+                AgregarTextoLargo(f, "Motivo / descripción", s.Motivo, 245);
+                AgregarTextoLargo(f, "Comentario de revisión",
+                    s.Comentario == string.Empty
+                        ? "Sin comentario todavía."
+                        : s.Comentario,
+                    425);
+
+                Button cerrar = new Button
+                {
+                    Text = "Cerrar",
+                    DialogResult = DialogResult.OK,
+                    Location = new Point(500, 592),
+                    Size = new Size(120, 36)
+                };
+                f.Controls.Add(cerrar);
+                f.AcceptButton = cerrar;
+                f.CancelButton = cerrar;
+
+                f.ShowDialog(this);
+            }
+        }
+
+        private void AgregarDato(Form f, string titulo, string valor, int x, int y)
+        {
+            f.Controls.Add(new Label
+            {
+                Text = titulo,
+                ForeColor = Color.DimGray,
+                Font = new Font("Segoe UI", 9F),
+                AutoSize = true,
+                Location = new Point(x, y)
+            });
+
+            f.Controls.Add(new Label
+            {
+                Text = valor,
+                Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+                AutoSize = false,
+                Size = new Size(x == 20 && y == 140 ? 600 : 290, 26),
+                Location = new Point(x, y + 20)
+            });
+        }
+
+        // Campo amplio, multilínea, con ajuste de línea y scroll vertical.
+        private void AgregarTextoLargo(Form f, string titulo, string texto, int y)
+        {
+            f.Controls.Add(new Label
+            {
+                Text = titulo,
+                Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+                AutoSize = true,
+                Location = new Point(20, y)
+            });
+
+            f.Controls.Add(new TextBox
+            {
+                Text = texto,
+                Multiline = true,
+                ReadOnly = true,
+                WordWrap = true,
+                ScrollBars = ScrollBars.Vertical,
+                BackColor = Color.FromArgb(248, 248, 248),
+                Location = new Point(20, y + 25),
+                Size = new Size(600, 140),
+                TabStop = false
+            });
         }
     }
 }

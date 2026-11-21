@@ -23,6 +23,9 @@ namespace FediCasa.Forms
         private ComboBox cboFormaPago;
 
         private Button btnAgregar;
+        private ListBox lstSugerencias;
+        private Label lblInfoProducto;
+        private bool ignorarCambioTexto;
         private Button btnModificar;
         private Button btnEliminar;
         private Button btnVaciar;
@@ -130,7 +133,7 @@ namespace FediCasa.Forms
                 new Label
                 {
                     Text =
-                        "Código:",
+                        "Buscar:",
 
                     AutoSize = true,
 
@@ -191,20 +194,21 @@ namespace FediCasa.Forms
             btnAgregar.Click +=
                 BtnAgregar_Click;
 
-            Label lblInfo =
+            CrearBuscadorProductos();
+
+            lblInfoProducto =
                 new Label
                 {
                     Text =
-                        "Ingrese el código del producto y la cantidad.\n" +
-                        "Solo se pueden vender productos activos.",
-
-                    AutoSize = true,
-
+                        "Escriba el código o parte del nombre\n" +
+                        "y elija el producto de la lista.",
+                    AutoSize = false,
                     ForeColor =
                         Color.DimGray,
-
                     Location =
-                        new Point(20, 115)
+                        new Point(20, 112),
+                    Size =
+                        new Size(390, 58)
                 };
 
             grpProducto.Controls.AddRange(
@@ -215,7 +219,7 @@ namespace FediCasa.Forms
                     lblCantidad,
                     txtCantidad,
                     btnAgregar,
-                    lblInfo
+                    lblInfoProducto
                 });
 
             // =====================================================
@@ -687,15 +691,220 @@ namespace FediCasa.Forms
             AgregarProductoAlCarrito();
         }
 
+        // =========================================================
+        // BÚSQUEDA RÁPIDA DE PRODUCTOS (por código o nombre)
+        // =========================================================
+
+        private class ItemBusqueda
+        {
+            public Producto Producto;
+
+            public override string ToString()
+            {
+                string stock =
+                    Producto.Stock > 0
+                        ? "Stock " + Producto.Stock
+                        : "AGOTADO";
+
+                return Producto.Nombre +
+                       "  (" + Producto.Codigo + ")  -  S/ " +
+                       Producto.Precio.ToString("0.00") +
+                       "  -  " + stock;
+            }
+        }
+
+        private void CrearBuscadorProductos()
+        {
+            lstSugerencias =
+                new ListBox
+                {
+                    Visible = false,
+                    Width = 430,
+                    Font = new Font("Segoe UI", 10),
+                    IntegralHeight = false,
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+
+            Controls.Add(lstSugerencias);
+
+            txtCodigoProducto.TextChanged +=
+                (s, e) => ActualizarSugerencias();
+
+            txtCodigoProducto.Leave +=
+                (s, e) => BeginInvoke(
+                    new Action(() =>
+                    {
+                        if (!lstSugerencias.Focused)
+                            lstSugerencias.Visible = false;
+                    }));
+
+            lstSugerencias.Click +=
+                (s, e) => ElegirSugerencia();
+
+            lstSugerencias.KeyDown +=
+                (s, e) =>
+                {
+                    if (e.KeyCode == Keys.Enter)
+                    {
+                        e.SuppressKeyPress = true;
+                        ElegirSugerencia();
+                    }
+                    else if (e.KeyCode == Keys.Escape)
+                    {
+                        lstSugerencias.Visible = false;
+                        txtCodigoProducto.Focus();
+                    }
+                };
+
+            // Enter en cantidad agrega el producto.
+            txtCantidad.KeyDown +=
+                (s, e) =>
+                {
+                    if (e.KeyCode == Keys.Enter)
+                    {
+                        e.SuppressKeyPress = true;
+                        AgregarProductoAlCarrito();
+                    }
+                };
+        }
+
+        private void ActualizarSugerencias()
+        {
+            if (ignorarCambioTexto)
+                return;
+
+            string texto = txtCodigoProducto.Text.Trim();
+
+            lstSugerencias.Items.Clear();
+
+            if (texto == string.Empty)
+            {
+                lstSugerencias.Visible = false;
+                MostrarInfoProducto(null);
+                return;
+            }
+
+            // Coincidencia exacta de código: muestra su resumen.
+            MostrarInfoProducto(
+                ProductoService.BuscarPorCodigo(texto));
+
+            var resultados =
+                ProductoService.Buscar(texto)
+                    .OrderByDescending(p =>
+                        p.Codigo.Equals(
+                            texto,
+                            StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(p =>
+                        p.Nombre.StartsWith(
+                            texto,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        p.Codigo.StartsWith(
+                            texto,
+                            StringComparison.OrdinalIgnoreCase))
+                    .ThenBy(p => p.Nombre)
+                    .Take(8)
+                    .ToList();
+
+            if (resultados.Count == 0)
+            {
+                lstSugerencias.Visible = false;
+                return;
+            }
+
+            foreach (Producto p in resultados)
+            {
+                lstSugerencias.Items.Add(
+                    new ItemBusqueda { Producto = p });
+            }
+
+            Point posicion =
+                PointToClient(
+                    txtCodigoProducto.Parent.PointToScreen(
+                        new Point(
+                            txtCodigoProducto.Left,
+                            txtCodigoProducto.Bottom)));
+
+            lstSugerencias.Location = posicion;
+            lstSugerencias.Height =
+                Math.Min(resultados.Count, 8) * 22 + 6;
+
+            lstSugerencias.SelectedIndex = 0;
+            lstSugerencias.Visible = true;
+            lstSugerencias.BringToFront();
+        }
+
+        private void ElegirSugerencia()
+        {
+            ItemBusqueda item =
+                lstSugerencias.SelectedItem as ItemBusqueda;
+
+            if (item == null)
+                return;
+
+            ignorarCambioTexto = true;
+            txtCodigoProducto.Text = item.Producto.Codigo;
+            ignorarCambioTexto = false;
+
+            lstSugerencias.Visible = false;
+            MostrarInfoProducto(item.Producto);
+
+            txtCantidad.Focus();
+            txtCantidad.SelectAll();
+        }
+
+        private void MostrarInfoProducto(Producto producto)
+        {
+            if (producto == null)
+            {
+                lblInfoProducto.ForeColor = Color.DimGray;
+                lblInfoProducto.Text =
+                    "Escriba el código o parte del nombre\n" +
+                    "y elija el producto de la lista.";
+                return;
+            }
+
+            lblInfoProducto.ForeColor =
+                producto.Stock > 0
+                    ? Color.FromArgb(30, 100, 50)
+                    : Color.Firebrick;
+
+            lblInfoProducto.Text =
+                producto.Nombre + "\n" +
+                "Código: " + producto.Codigo +
+                "   |   Precio: S/ " +
+                producto.Precio.ToString("0.00") + "\n" +
+                "Stock disponible: " + producto.Stock + " " +
+                producto.UnidadMedida;
+        }
+
         private void TxtCodigoProducto_KeyDown(
             object sender,
             KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
+            if (e.KeyCode == Keys.Down &&
+                lstSugerencias.Visible)
+            {
+                e.SuppressKeyPress = true;
+                lstSugerencias.Focus();
+            }
+            else if (e.KeyCode == Keys.Escape)
+            {
+                lstSugerencias.Visible = false;
+            }
+            else if (e.KeyCode == Keys.Enter)
             {
                 e.SuppressKeyPress = true;
 
-                AgregarProductoAlCarrito();
+                // Con lista abierta, Enter elige la primera opción.
+                if (lstSugerencias.Visible &&
+                    lstSugerencias.SelectedItem != null)
+                {
+                    ElegirSugerencia();
+                }
+                else
+                {
+                    AgregarProductoAlCarrito();
+                }
             }
         }
 
@@ -745,6 +954,32 @@ namespace FediCasa.Forms
                 ProductoService.BuscarPorCodigo(
                     codigo);
 
+            // Si escribió un nombre en vez del código.
+            if (producto == null)
+            {
+                var coincidencias =
+                    ProductoService.Buscar(codigo);
+
+                if (coincidencias.Count == 1)
+                {
+                    producto = coincidencias[0];
+                    codigo = producto.Codigo;
+                }
+                else if (coincidencias.Count > 1)
+                {
+                    ActualizarSugerencias();
+
+                    MessageBox.Show(
+                        "Hay varios productos con ese nombre." +
+                        "Elija uno de la lista.",
+                        "Venta",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+
+                    return;
+                }
+            }
+
             if (producto == null)
             {
                 MessageBox.Show(
@@ -791,7 +1026,9 @@ namespace FediCasa.Forms
                     $"Stock insuficiente.\n\n" +
                     $"Producto: {producto.Nombre}\n" +
                     $"Stock disponible: {producto.Stock}\n" +
-                    $"Cantidad solicitada: {cantidadFinal}",
+                    $"Ya en el carrito: {existente?.Cantidad ?? 0}\n" +
+                    $"Cantidad solicitada ahora: {cantidad}\n\n" +
+                    "No hay stock suficiente para esa cantidad.",
                     "Stock insuficiente",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
