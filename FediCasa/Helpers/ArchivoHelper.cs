@@ -187,6 +187,47 @@ namespace FediCasa.Helpers
         }
 
         // =========================================================
+        // SOLICITUDES E INCIDENCIAS
+        // =========================================================
+
+        private static readonly string ArchivoSolicitudes =
+            Path.Combine(CarpetaData, "solicitudes.txt");
+
+        public static void GuardarSolicitudes(List<Solicitud> solicitudes)
+        {
+            InicializarCarpetaData();
+
+            using StreamWriter escritor = new StreamWriter(
+                ArchivoSolicitudes,
+                false);
+
+            foreach (Solicitud s in solicitudes)
+            {
+                escritor.WriteLine(s.ToString());
+            }
+        }
+
+        public static List<Solicitud> LeerSolicitudes()
+        {
+            InicializarCarpetaData();
+
+            List<Solicitud> lista = new List<Solicitud>();
+
+            if (!File.Exists(ArchivoSolicitudes))
+                return lista;
+
+            foreach (string linea in File.ReadAllLines(ArchivoSolicitudes))
+            {
+                Solicitud s = Solicitud.DesdeTexto(linea);
+
+                if (s != null)
+                    lista.Add(s);
+            }
+
+            return lista;
+        }
+
+        // =========================================================
         // EMPLEADOS / USUARIOS
         // =========================================================
 

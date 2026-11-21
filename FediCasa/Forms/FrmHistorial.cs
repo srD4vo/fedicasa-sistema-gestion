@@ -17,7 +17,8 @@ namespace FediCasa.Forms
 
         public FrmHistorial()
         {
-            if (!SesionService.PuedeConsultarHistorial())
+            if (!SesionService.PuedeConsultarHistorial() &&
+                !SesionService.PuedeConsultarMovimientos())
             {
                 MessageBox.Show(
                     "Tu perfil no tiene permisos para esta operación.",
@@ -70,7 +71,7 @@ namespace FediCasa.Forms
                 "Todos",
                 "Ingreso",
                 "Salida",
-                "Incidencia",
+                "Diferencia",
                 "Venta confirmada",
                 "Venta anulada",
                 "Venta registrada anulada"
@@ -117,7 +118,14 @@ namespace FediCasa.Forms
 
             string tipo = cboTipo.SelectedItem?.ToString() ?? "Todos";
 
+            bool soloInventario =
+                !SesionService.PuedeConsultarHistorial();
+
             var lista = MovimientoService.Obtener()
+                .Where(m => !soloInventario ||
+                            m.Tipo == "Ingreso" ||
+                            m.Tipo == "Salida" ||
+                            m.Tipo == "Diferencia")
                 .Where(m => tipo == "Todos" ||
                             m.Tipo.Equals(tipo, StringComparison.OrdinalIgnoreCase));
 

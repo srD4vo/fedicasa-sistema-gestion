@@ -186,7 +186,28 @@ namespace FediCasa.Services
         // CU-02 Gestionar usuarios
         // ---------------------------------------------------------
 
+        // Solo el usuario maestro crea, modifica y elimina usuarios.
         public static bool PuedeGestionarUsuarios()
+        {
+            return EsUsuarioMaestro();
+        }
+
+        // El Administrador solo puede visualizar usuarios.
+        public static bool PuedeVerUsuarios()
+        {
+            return EsUsuarioMaestro() ||
+                   EsAdministrador();
+        }
+
+        // Inventario y Ventas crean solicitudes / incidencias.
+        public static bool PuedeCrearSolicitud()
+        {
+            return EsInventario() ||
+                   EsVentas();
+        }
+
+        // El Administrador (y el maestro) revisan las solicitudes.
+        public static bool PuedeAutorizarSolicitudes()
         {
             return EsUsuarioMaestro() ||
                    EsAdministrador();
@@ -209,6 +230,7 @@ namespace FediCasa.Services
         public static bool PuedeConsultarInventario()
         {
             return EsUsuarioMaestro() ||
+                   EsAdministrador() ||
                    EsInventario() ||
                    EsVentas();
         }

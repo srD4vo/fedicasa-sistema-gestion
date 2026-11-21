@@ -557,7 +557,7 @@ namespace FediCasa.Forms
                     Text =
                         "Anular venta",
                     Location =
-                        new Point(390, 590),
+                        new Point(840, 635), // Movido a la derecha y debajo de "Generar boleta"
                     Size =
                         new Size(140, 38)
                 };

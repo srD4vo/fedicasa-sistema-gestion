@@ -18,6 +18,7 @@ namespace FediCasa.Forms
         private Button btnEmpleados;
         private Button btnReportes;
         private Button btnHistorial;
+        private Button btnSolicitudes;
         private Button btnCerrarSesion;
         private Button btnSalir;
 
@@ -143,6 +144,11 @@ namespace FediCasa.Forms
                 280,
                 320);
 
+            btnSolicitudes = CrearBoton(
+                "Solicitudes",
+                515,
+                320);
+
             btnCerrarSesion = CrearBoton(
                 "Cerrar sesión",
                 280,
@@ -164,6 +170,7 @@ namespace FediCasa.Forms
             Controls.Add(btnEmpleados);
             Controls.Add(btnReportes);
             Controls.Add(btnHistorial);
+            Controls.Add(btnSolicitudes);
             Controls.Add(btnCerrarSesion);
             Controls.Add(btnSalir);
 
@@ -184,6 +191,9 @@ namespace FediCasa.Forms
 
             btnHistorial.Click +=
                 BtnHistorial_Click;
+
+            btnSolicitudes.Click +=
+                BtnSolicitudes_Click;
 
             btnCerrarSesion.Click +=
                 BtnCerrarSesion_Click;
@@ -291,7 +301,7 @@ namespace FediCasa.Forms
             // -----------------------------------------------------
 
             btnEmpleados.Visible =
-                SesionService.PuedeGestionarUsuarios();
+                SesionService.PuedeVerUsuarios();
 
             // -----------------------------------------------------
             // REPORTES
@@ -307,7 +317,11 @@ namespace FediCasa.Forms
             // -----------------------------------------------------
 
             btnHistorial.Visible =
-                SesionService.PuedeConsultarHistorial();
+                SesionService.PuedeConsultarHistorial() ||
+                SesionService.PuedeConsultarMovimientos();
+
+            // Solicitudes: todos los perfiles
+            btnSolicitudes.Visible = true;
 
             // -----------------------------------------------------
             // ADMINISTRADOR
@@ -332,6 +346,7 @@ namespace FediCasa.Forms
                 btnEmpleados.Visible = true;
                 btnReportes.Visible = true;
                 btnHistorial.Visible = true;
+                btnSolicitudes.Visible = true;
             }
         }
 
@@ -381,7 +396,8 @@ namespace FediCasa.Forms
             object sender,
             EventArgs e)
         {
-            if (!SesionService.PuedeConsultarHistorial())
+            if (!SesionService.PuedeConsultarHistorial() &&
+                !SesionService.PuedeConsultarMovimientos())
             {
                 MostrarAccesoDenegado();
                 return;
@@ -389,6 +405,18 @@ namespace FediCasa.Forms
 
             AbrirFormulario(
                 new FrmHistorial());
+        }
+
+        // =========================================================
+        // SOLICITUDES
+        // =========================================================
+
+        private void BtnSolicitudes_Click(
+            object sender,
+            EventArgs e)
+        {
+            AbrirFormulario(
+                new FrmSolicitudes());
         }
 
         // =========================================================
@@ -419,7 +447,7 @@ namespace FediCasa.Forms
             object sender,
             EventArgs e)
         {
-            if (!SesionService.PuedeGestionarUsuarios())
+            if (!SesionService.PuedeVerUsuarios())
             {
                 MostrarAccesoDenegado();
                 return;

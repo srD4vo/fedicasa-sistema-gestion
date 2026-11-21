@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -53,10 +53,10 @@ namespace FediCasa.Forms
             object sender,
             EventArgs e)
         {
-            if (!SesionService.PuedeGestionarUsuarios())
+            if (!SesionService.PuedeVerUsuarios())
             {
                 MessageBox.Show(
-                    "No tienes permisos para acceder a la gestión de usuarios.",
+                    "No tienes permisos para acceder a los usuarios.",
                     "Acceso denegado",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
